@@ -132,7 +132,7 @@ export function Production() {
         )}
       </main>
 
-      <div className="safe-b fixed inset-x-0 bottom-[58px] z-20 px-4 pb-2">
+      <div className="safe-b fixed inset-x-0 z-30 px-4 pb-2" style={{ bottom: 'var(--spacing-tabbar)' }}>
         <Button variant="primary" size="counter" full onClick={() => navigate('/production/batch')}>
           Déclarer un batch
         </Button>

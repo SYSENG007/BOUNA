@@ -60,7 +60,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
  */
 export function TabBar({ items }: { items: NavItem[] }) {
   return (
-    <nav className="safe-b sticky bottom-0 z-30 border-t border-ink-200 bg-surface/97 backdrop-blur">
+    <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/97 backdrop-blur lg:sticky">
       <div className="flex">
         {items.map(({ to, label, Icon }) => (
           <NavLink

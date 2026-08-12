@@ -11,6 +11,7 @@ import { deviceId, uuid, batchCode } from '../domain/ids';
 import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
 import { pendingEvents, localTransport } from './outbox';
+import { evaluateRules, type Cooldowns } from '../domain/rules';
 import { loadState, saveState } from './persist';
 import {
   ITEMS, LOC, LOCATIONS, ORG_ID, RECIPES, RECIPE_VERSIONS, SEED_AUDIT, SEED_CASH_SESSION,
@@ -34,6 +35,8 @@ interface State {
   audit: AuditEvent[];
   saleCounter: number;
   batchCounter: number;
+  /** §45 — dernier déclenchement par règle, pour ne pas répéter la même alerte. */
+  cooldowns: Cooldowns;
 }
 
 const initialState: State = {
@@ -51,6 +54,7 @@ const initialState: State = {
   audit: SEED_AUDIT,
   saleCounter: 453,
   batchCounter: 4,
+  cooldowns: {},
 };
 
 type Action =
@@ -76,7 +80,8 @@ type Action =
     }
   | { type: 'SAVE_ITEM'; item: Item }
   | { type: 'SET_SYNC'; ids: UUID[]; status: DomainEvent['syncStatus'] }
-  | { type: 'NOTIFICATION_STATUS'; id: UUID; status: Notification['status'] };
+  | { type: 'NOTIFICATION_STATUS'; id: UUID; status: Notification['status'] }
+  | { type: 'RAISE'; notifications: Notification[]; cooldowns: Cooldowns };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -141,6 +146,13 @@ function reducer(state: State, action: Action): State {
               }
             : e,
         ),
+      };
+
+    case 'RAISE':
+      return {
+        ...state,
+        notifications: [...action.notifications, ...state.notifications],
+        cooldowns: action.cooldowns,
       };
 
     case 'NOTIFICATION_STATUS':
@@ -665,6 +677,48 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const setNotificationStatus = useCallback<Ctx['setNotificationStatus']>((id, status) => {
     dispatch({ type: 'NOTIFICATION_STATUS', id, status });
   }, []);
+
+  /* ------------------------------------------------------- Alertes */
+
+  /**
+   * Les alertes ne sont pas écrites à la main : elles découlent de l'état.
+   * On réévalue après chaque mouvement, vente ou perte ; le moteur applique
+   * lui-même le cooldown et refuse de répéter ce qui a déjà été dit.
+   */
+  useEffect(() => {
+    const soldToday = new Map<UUID, number>();
+    for (const sale of state.sales) {
+      if (sale.status !== 'COMPLETED') continue;
+      for (const line of sale.lines) {
+        soldToday.set(line.itemId, (soldToday.get(line.itemId) ?? 0) + line.quantity);
+      }
+    }
+
+    const cashSales = state.sales
+      .filter((s) => s.status === 'COMPLETED' && s.paymentMethod === 'CASH')
+      .reduce((sum, s) => sum + s.total, 0);
+    const cashVariance =
+      state.cashSession.countedCash === null
+        ? null
+        : state.cashSession.countedCash - (state.cashSession.openingCash + cashSales);
+
+    const { notifications, cooldowns } = evaluateRules(
+      {
+        items: state.items,
+        stockOf: (itemId) => {
+          let total = 0;
+          for (const [key, value] of stock) if (key.startsWith(`${itemId}@`)) total += value;
+          return total;
+        },
+        soldToday,
+        cashVariance,
+        wasteCostToday: state.waste.reduce((sum, w) => sum + w.cost, 0),
+      },
+      state.cooldowns,
+    );
+
+    if (notifications.length) dispatch({ type: 'RAISE', notifications, cooldowns });
+  }, [state.items, state.sales, state.waste, state.cashSession, state.cooldowns, stock]);
 
   /* ----------------------------------------------------------- Sync */
 

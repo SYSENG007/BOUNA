@@ -58,7 +58,10 @@ function Shell() {
       )}
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-        <div className="flex flex-1 flex-col">
+        <div
+          className="flex flex-1 flex-col"
+          style={!immersive ? { paddingBottom: 'var(--spacing-tabbar)' } : undefined}
+        >
           <Outlet />
         </div>
         {!immersive && (

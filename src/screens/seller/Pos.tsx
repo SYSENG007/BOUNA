@@ -105,7 +105,7 @@ export function Pos() {
 
       {/* Panier flottant : le total est toujours visible, l'action toujours à portée de pouce. */}
       {count > 0 && (
-        <div className="safe-b fixed inset-x-0 bottom-[58px] z-20 px-3 pb-2">
+        <div className="safe-b fixed inset-x-0 z-30 px-3 pb-2" style={{ bottom: 'var(--spacing-tabbar)' }}>
           <button
             onClick={() => navigate('/vendre/panier')}
             className="no-select flex min-h-[56px] w-full items-center justify-between gap-3 rounded-[8px] bg-cafe px-5 text-sable-pale"

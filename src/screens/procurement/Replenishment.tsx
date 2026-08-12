@@ -58,7 +58,7 @@ export function Replenishment() {
             >
               <span
                 className={clsx(
-                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border text-[13px]',
+                  'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center self-start rounded-[4px] border text-[13px]',
                   checked[item.id]
                     ? 'border-conforme bg-conforme text-white'
                     : 'border-ink-300 bg-surface',
@@ -94,7 +94,7 @@ export function Replenishment() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">À acheter</h1>
+        <h1 className="t-h1 text-cafe">À acheter</h1>
         <p className="text-[12px] text-ink-500">Besoins calculés depuis les seuils et le stock réel</p>
       </header>
 

@@ -1,4 +1,4 @@
-import { UNIT_BASE, type Unit } from './types';
+import { UNIT_BASE, UNIT_LABEL, type Unit } from './types';
 
 /** Convertit une quantité entre deux unités de la même famille (§10). */
 export function convert(quantity: number, from: Unit, to: Unit): number {
@@ -23,5 +23,5 @@ export function formatQty(quantity: number, unit: Unit): string {
   const text = Number.isInteger(rounded)
     ? String(rounded)
     : rounded.toFixed(rounded * 10 % 1 === 0 ? 1 : 2).replace('.', ',');
-  return unit === 'unite' ? `${text}` : `${text} ${unit}`;
+  return unit === 'unite' ? text : `${text} ${UNIT_LABEL[unit]}`;
 }

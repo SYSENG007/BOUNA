@@ -47,7 +47,7 @@ export function Alerts() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">Alertes</h1>
+        <h1 className="t-h1 text-cafe">Alertes</h1>
         <p className="text-[12px] text-ink-500">Adressées à votre rôle · action proposée, pas seulement un constat</p>
       </header>
 

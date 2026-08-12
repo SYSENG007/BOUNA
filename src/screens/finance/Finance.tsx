@@ -34,7 +34,7 @@ export function Finance() {
       <div className="mx-auto max-w-4xl px-4 py-6 lg:px-10 lg:py-10">
         <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-display text-[30px] leading-tight text-cafe lg:text-[38px]">Finance</h1>
+            <h1 className="t-h1 text-cafe lg:text-[38px] lg:leading-[44px]">Finance</h1>
             <p className="text-[13px] text-ink-500">Dépenses du jour et journal d'audit</p>
           </div>
           <Segmented

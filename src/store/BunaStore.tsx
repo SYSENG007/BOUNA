@@ -74,6 +74,7 @@ type Action =
       bumpSale?: boolean;
       bumpBatch?: boolean;
     }
+  | { type: 'SAVE_ITEM'; item: Item }
   | { type: 'SET_SYNC'; ids: UUID[]; status: DomainEvent['syncStatus'] }
   | { type: 'NOTIFICATION_STATUS'; id: UUID; status: Notification['status'] };
 
@@ -114,6 +115,16 @@ function reducer(state: State, action: Action): State {
           : state.notifications,
         saleCounter: a.bumpSale ? state.saleCounter + 1 : state.saleCounter,
         batchCounter: a.bumpBatch ? state.batchCounter + 1 : state.batchCounter,
+      };
+    }
+
+    case 'SAVE_ITEM': {
+      const exists = state.items.some((i) => i.id === action.item.id);
+      return {
+        ...state,
+        items: exists
+          ? state.items.map((i) => (i.id === action.item.id ? action.item : i))
+          : [...state.items, action.item],
       };
     }
 
@@ -171,6 +182,17 @@ interface Ctx {
   recordWaste: (input: { itemId: UUID; locationId: UUID; quantity: number; reason: WasteReason }) => void;
   transferStock: (input: { itemId: UUID; from: UUID; to: UUID; quantity: number }) => void;
   recordExpense: (input: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => void;
+  /** Crée ou met à jour un article du catalogue. */
+  saveItem: (item: Item) => void;
+  /** Archive un article : jamais de suppression, l'historique doit rester lisible. */
+  archiveItem: (itemId: UUID) => void;
+  /**
+   * Comptage d'inventaire : produit un mouvement d'ajustement motivé (RULE-003/008).
+   * On ne écrit jamais le stock ; on écrit l'écart constaté.
+   */
+  adjustStock: (input: {
+    itemId: UUID; locationId: UUID; countedQuantity: number; reason: string;
+  }) => void;
   /** Réception : mouvements + coût moyen pondéré + dépense, en une transaction. */
   receiveGoods: (input: {
     supplierId: UUID;
@@ -473,6 +495,69 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     [user, makeEvent, makeAudit],
   );
 
+  const saveItem = useCallback<Ctx['saveItem']>(
+    (item) => {
+      const isNew = !itemsMap.has(item.id);
+      dispatch({ type: 'SAVE_ITEM', item });
+      dispatch({
+        type: 'COMMIT',
+        audit: [
+          makeAudit(
+            isNew ? `Article créé — ${item.name}` : `Article modifié — ${item.name}`,
+            `${item.kind} · ${item.unit}${item.price ? ` · ${item.price} FCFA` : ''}`,
+            `item:${item.id.slice(0, 8)}`,
+          ),
+        ],
+      });
+    },
+    [itemsMap, makeAudit],
+  );
+
+  const archiveItem = useCallback<Ctx['archiveItem']>(
+    (itemId) => {
+      const item = itemsMap.get(itemId);
+      if (!item) return;
+      dispatch({ type: 'SAVE_ITEM', item: { ...item, archived: true } });
+      dispatch({
+        type: 'COMMIT',
+        audit: [makeAudit(`Article archivé — ${item.name}`, 'retiré du catalogue, historique conservé')],
+      });
+    },
+    [itemsMap, makeAudit],
+  );
+
+  const adjustStock = useCallback<Ctx['adjustStock']>(
+    ({ itemId, locationId, countedQuantity, reason }) => {
+      const item = itemsMap.get(itemId);
+      if (!item) return;
+
+      const theoretical = stock.get(`${itemId}@${locationId}`) ?? 0;
+      const delta = countedQuantity - theoretical;
+      // Pas d'écart, pas de mouvement : un comptage conforme ne pollue pas le journal.
+      if (Math.abs(delta) < 0.0001) return;
+
+      const countId = uuid();
+      dispatch({
+        type: 'COMMIT',
+        movements: [
+          makeMovement(itemId, locationId, delta, item.unit, 'ADJUSTMENT', 'InventoryCount', countId),
+        ],
+        events: [
+          makeEvent('STOCK_COUNTED', 'InventoryCount', countId, {
+            itemId, locationId, theoretical, counted: countedQuantity, delta, reason,
+          }),
+        ],
+        audit: [
+          makeAudit(
+            `Inventaire — ${item.name}`,
+            `théorique ${theoretical.toFixed(2)} · compté ${countedQuantity} · écart ${delta > 0 ? '+' : ''}${delta.toFixed(2)} ${item.unit} · motif : ${reason}`,
+          ),
+        ],
+      });
+    },
+    [itemsMap, stock, makeEvent, makeMovement, makeAudit],
+  );
+
   const receiveGoods = useCallback<Ctx['receiveGoods']>(
     ({ supplierId, locationId, lines, transportCost, paymentMethod }) => {
       if (!lines.length) return;
@@ -621,6 +706,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     logout: () => dispatch({ type: 'LOGOUT' }),
     syncNow, completeSale, voidSale, completeBatch, recordWaste, transferStock,
     recordExpense, receiveGoods, closeCashSession, setNotificationStatus, stockOf,
+    saveItem, archiveItem, adjustStock,
   };
 
   return <BunaContext.Provider value={value}>{children}</BunaContext.Provider>;

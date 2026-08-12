@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import clsx from 'clsx';
+import { IconMinus, IconPlus } from '../icons';
 
 /* =================================================================
    BUNA — primitives d'interface
@@ -54,17 +55,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-cafe text-sable-pale hover:bg-brun active:bg-brun-deep disabled:bg-ink-200 disabled:text-ink-400',
-  secondary: 'bg-surface text-cafe border border-ink-200 hover:border-brun active:bg-sable-pale',
+  /* Une seule action pleine par écran : elle doit peser. Liseré interne clair
+     + ombre courte, puis enfoncement réel au doigt. */
+  primary:
+    'bg-cafe text-sable-pale shadow-[var(--shadow-key)] hover:bg-[#3D2C21] ' +
+    'active:translate-y-px active:shadow-none ' +
+    'disabled:bg-ink-200 disabled:text-ink-400 disabled:shadow-none disabled:translate-y-0',
+  secondary:
+    'bg-surface text-cafe border border-ink-200 hover:border-ink-300 hover:bg-[#FDFBF7] ' +
+    'active:translate-y-px active:bg-sable-pale disabled:text-ink-400',
   ghost: 'bg-transparent text-brun hover:text-or-ink underline-offset-4 hover:underline',
-  danger: 'bg-surface text-critique border border-critique/40 hover:bg-critique-pale',
+  danger:
+    'bg-surface text-critique border border-critique/35 hover:bg-critique-pale ' +
+    'active:translate-y-px',
 };
 
 /* Cibles tactiles : 44 px minimum, 56 px pour les actions du comptoir. */
 const SIZE: Record<ButtonSize, string> = {
-  counter: 'min-h-[56px] px-6 text-[16px] font-medium',
+  counter: 'min-h-[56px] px-6 text-[16px] font-medium tracking-[-0.005em]',
   base: 'min-h-[44px] px-5 text-[15px] font-medium',
-  compact: 'min-h-[36px] px-3 text-[13px]',
+  compact: 'min-h-[36px] px-3.5 text-[13px] font-medium',
 };
 
 export function Button({
@@ -74,7 +84,8 @@ export function Button({
     <button
       className={clsx(
         'no-select inline-flex items-center justify-center gap-2 rounded-[6px]',
-        'transition-colors duration-100 disabled:cursor-not-allowed',
+        'transition-[background-color,border-color,transform,box-shadow] duration-100 ease-out',
+        'disabled:cursor-not-allowed',
         VARIANT[variant], SIZE[size], full && 'w-full', className,
       )}
       {...rest}
@@ -100,13 +111,16 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Field({ label, hint, error, suffix, className, ...rest }: FieldProps) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-800">{label}</span>
       <span className="relative block">
         <input
           className={clsx(
-            'min-h-[48px] w-full rounded-[4px] border bg-surface px-3.5 text-[15px] text-ink-900',
-            'placeholder:text-ink-400 focus:outline-none focus:ring-0',
-            error ? 'border-critique' : 'border-ink-200 focus:border-brun',
+            'min-h-[50px] w-full rounded-[4px] border bg-surface px-3.5 text-[15px] text-ink-900',
+            'placeholder:text-ink-400 focus:outline-none',
+            'transition-[border-color,box-shadow] duration-100',
+            error
+              ? 'border-critique'
+              : 'border-ink-200 focus:border-brun focus:shadow-[0_0_0_3px_rgba(110,74,46,0.10)]',
             suffix && 'pr-14',
             className,
           )}
@@ -139,12 +153,12 @@ export function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-800">{label}</span>
       <span className="relative block">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="min-h-[48px] w-full appearance-none rounded-[4px] border border-ink-200 bg-surface px-3.5 pr-10 text-[15px] text-ink-900 focus:border-brun focus:outline-none"
+          className="min-h-[50px] w-full appearance-none rounded-[4px] border border-ink-200 bg-surface px-3.5 pr-10 text-[15px] text-ink-900 transition-[border-color,box-shadow] duration-100 focus:border-brun focus:shadow-[0_0_0_3px_rgba(110,74,46,0.10)] focus:outline-none"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -175,21 +189,21 @@ export function NumberStepper({
         type="button"
         onClick={() => step(-1)}
         aria-label="Diminuer"
-        className="no-select w-[56px] shrink-0 text-[22px] text-cafe transition-colors active:bg-sable-pale"
+        className="no-select flex w-[56px] shrink-0 items-center justify-center text-cafe transition-colors active:bg-sable-pale"
       >
-        −
+        <IconMinus size={20} />
       </button>
       <div className="flex flex-1 items-baseline justify-center gap-1.5 border-x border-ink-100 py-3">
-        <span className="num text-[30px] leading-none text-ink-900">{value}</span>
+        <span className="t-figure text-[32px] leading-none text-ink-900">{value}</span>
         <span className="text-[13px] text-ink-500">{unit}</span>
       </div>
       <button
         type="button"
         onClick={() => step(1)}
         aria-label="Augmenter"
-        className="no-select w-[56px] shrink-0 text-[22px] text-cafe transition-colors active:bg-sable-pale"
+        className="no-select flex w-[56px] shrink-0 items-center justify-center text-cafe transition-colors active:bg-sable-pale"
       >
-        +
+        <IconPlus size={20} />
       </button>
     </div>
   );

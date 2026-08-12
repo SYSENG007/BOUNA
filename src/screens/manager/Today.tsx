@@ -50,7 +50,7 @@ export function Today() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">Aujourd'hui</h1>
+        <h1 className="t-h1 text-cafe">Aujourd'hui</h1>
         <p className="text-[12px] text-ink-500">
           {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} · Coffee Bar Auchan
         </p>
@@ -60,7 +60,7 @@ export function Today() {
         <Card className="flex flex-col gap-1">
           <SectionLabel>Chiffre d'affaires</SectionLabel>
           <div className="flex items-baseline gap-2">
-            <span className="num text-[40px] leading-none text-ink-900">{fcfa(kpi.revenue)}</span>
+            <span className="t-figure text-[40px] leading-none text-ink-900">{fcfa(kpi.revenue)}</span>
             <span className="text-[13px] text-ink-500">FCFA</span>
           </div>
           <div className="text-[12px] text-ink-500">

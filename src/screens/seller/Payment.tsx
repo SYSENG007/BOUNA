@@ -47,7 +47,7 @@ export function Payment() {
       <main className="flex-1 px-4 pb-40 pt-4">
         <div className="rounded-[8px] bg-cafe px-5 py-5 text-sable-pale">
           <SectionLabel className="!text-[#A08E7C]">À encaisser</SectionLabel>
-          <div className="num mt-1 text-[40px] leading-none">{fcfa(total)}</div>
+          <div className="t-figure mt-1 text-[42px] leading-none">{fcfa(total)}</div>
           <div className="mt-1 text-[12px] text-[#A08E7C]">
             {count} article{count > 1 ? 's' : ''} · {user?.name.split(' ')[0]} · Shift #{state.cashSession.shiftNumber}
           </div>

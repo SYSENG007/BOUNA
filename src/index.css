@@ -55,12 +55,75 @@
   --radius-sheet: 16px;
 
   /* Élévation — ombres brunes et basses, jamais de gris froid */
-  --shadow-e1: 0 1px 2px rgba(46, 33, 26, 0.06), 0 2px 8px rgba(46, 33, 26, 0.05);
-  --shadow-e2: 0 2px 6px rgba(46, 33, 26, 0.10), 0 12px 32px rgba(46, 33, 26, 0.12);
+  --shadow-e1: 0 1px 1px rgba(46, 33, 26, 0.04), 0 2px 6px rgba(46, 33, 26, 0.05);
+  --shadow-e2: 0 1px 2px rgba(46, 33, 26, 0.06), 0 10px 28px rgba(46, 33, 26, 0.10);
+  /* Boutons pleins : ombre courte + liseré interne clair, comme une touche pressable. */
+  --shadow-key: 0 1px 0 rgba(255, 253, 250, 0.14) inset, 0 1px 2px rgba(23, 18, 15, 0.22);
 
   /* Cibles tactiles */
   --spacing-touch: 44px;     /* minimum absolu */
   --spacing-counter: 56px;   /* actions du comptoir */
+}
+
+/* ------------------------------------------------------------------
+   Échelle typographique — reprise telle quelle du design system.
+   Playfair porte la voix de marque, Plex Sans l'interface, Plex Mono
+   tout ce qui se compare en colonne.
+   ------------------------------------------------------------------ */
+@layer components {
+  .t-display {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 46px;
+    letter-spacing: -0.02em;
+  }
+  .t-h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 38px;
+    letter-spacing: -0.015em;
+  }
+  .t-h2 { font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+  .t-h3 { font-size: 17px; line-height: 24px; font-weight: 500; }
+  .t-body { font-size: 15px; line-height: 24px; }
+  .t-small { font-size: 13px; line-height: 20px; }
+  .t-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 15px; line-height: 22px; }
+
+  /* Chiffres héros : Playfair pour les moments de marque, Mono pour l'opérationnel. */
+  .t-figure {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    font-weight: 500;
+  }
+
+  /* ----------------------------------------------------------------
+     SIGNATURE — le filet doré de dérivation.
+     Ce que l'utilisateur DÉCLARE n'est jamais marqué.
+     Ce que le système DÉDUIT porte ce filet : stock, coût, marge,
+     rendement, consommation. C'est la philosophie du produit rendue
+     visible — « déclarer, pas saisir » — et le seul or de l'interface.
+     ---------------------------------------------------------------- */
+  .derived {
+    position: relative;
+    padding-left: 14px;
+  }
+  .derived::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 2px;
+    bottom: 2px;
+    width: 2px;
+    border-radius: 1px;
+    background: linear-gradient(
+      to bottom,
+      var(--color-or) 0%,
+      color-mix(in srgb, var(--color-or) 35%, transparent) 100%
+    );
+  }
 }
 
 @layer base {
@@ -83,7 +146,19 @@
     text-transform: uppercase;
     color: var(--color-ink-500);
   }
-  :focus-visible { outline: 2px solid var(--color-or); outline-offset: 2px; }
+  :focus-visible {
+    outline: 2px solid var(--color-or);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Le terrain se manipule vite : les transitions restent sous 140 ms. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
   button { font: inherit; }
   /* Le terrain se manipule d'une main : pas de sélection accidentelle. */
   .no-select { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

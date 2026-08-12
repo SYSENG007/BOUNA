@@ -21,7 +21,7 @@ export function Orders() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">Commandes</h1>
+        <h1 className="t-h1 text-cafe">Commandes</h1>
         <p className="text-[12px] text-ink-500">
           {state.sales.length} vente{state.sales.length > 1 ? 's' : ''} sur cet appareil
         </p>

@@ -5,6 +5,8 @@ import { useCart } from '../CartContext';
 import { fcfa, fcfaFull } from '../../domain/money';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
 import { BunaMark } from '../../design-system/components/primitives';
+import { ProductImage } from '../../design-system/components/ProductImage';
+import { IconCart } from '../../design-system/icons';
 
 /**
  * Écran de vente — la grille EST l'écran principal.
@@ -42,7 +44,7 @@ export function Pos() {
 
       <header className="flex items-center gap-3 px-4 pb-3 pt-4">
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-[24px] leading-tight text-cafe">
+          <h1 className="t-h1 text-cafe">
             Bonjour {user?.name.split(' ')[0]}
           </h1>
           <p className="truncate text-[12px] text-ink-500">
@@ -82,15 +84,12 @@ export function Pos() {
                     {qty}
                   </span>
                 )}
-                {/* Emplacement photo produit — initiale en attendant les visuels. */}
-                <div className="flex items-start gap-2">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] bg-sable font-display text-[15px] text-brun">
-                    {p.name.charAt(0)}
-                  </span>
-                  <span className="text-[15px] font-medium leading-tight text-ink-900">{p.name}</span>
+                <div className="flex items-start gap-2.5">
+                  <ProductImage src={p.imageUrl} name={p.name} size="sm" />
+                  <span className="text-[14.5px] font-medium leading-tight text-ink-900">{p.name}</span>
                 </div>
                 <div>
-                  <div className="num text-[17px] text-cafe">{fcfa(p.price ?? 0)}</div>
+                  <div className="t-figure text-[19px] text-cafe">{fcfa(p.price ?? 0)}</div>
                   <div className="text-[11px] text-ink-500">
                     {out ? 'Rupture' : `${Math.floor(available)} dispo`}
                   </div>
@@ -112,7 +111,10 @@ export function Pos() {
             className="no-select flex min-h-[56px] w-full items-center justify-between gap-3 rounded-[8px] bg-cafe px-5 text-sable-pale"
             style={{ boxShadow: 'var(--shadow-e2)' }}
           >
-            <span className="text-[15px] font-medium">Panier · {count}</span>
+            <span className="flex items-center gap-2 text-[15px] font-medium">
+              <IconCart size={19} />
+              Panier · {count}
+            </span>
             <span className="num text-[18px]">{fcfaFull(total)}</span>
           </button>
         </div>

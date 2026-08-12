@@ -47,7 +47,7 @@ export function Production() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">Production du jour</h1>
+        <h1 className="t-h1 text-cafe">Production du jour</h1>
         <p className="text-[12px] text-ink-500">
           Cuisine ·{' '}
           {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useBuna, SUPPLIERS } from '../../store/BunaStore';
 import { fcfaFull } from '../../domain/money';
 import { formatQty } from '../../domain/units';
-import { PAYMENT_LABEL, type PaymentMethod } from '../../domain/types';
+import { PAYMENT_LABEL, UNIT_LABEL, type PaymentMethod } from '../../domain/types';
 import { ScreenHeader } from '../../design-system/components/patterns';
 import {
   Button, Card, Field, SectionLabel, SelectField,
@@ -83,7 +83,7 @@ export function GoodsReceipt() {
                   type="number"
                   inputMode="decimal"
                   value={got}
-                  suffix={item.unit}
+                  suffix={UNIT_LABEL[item.unit]}
                   onChange={(e) =>
                     setReceived((r) => ({ ...r, [line.itemId]: Number(e.target.value) }))
                   }

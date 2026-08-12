@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useBuna, SUPPLIERS, LOCATIONS, LOC } from '../../store/BunaStore';
 import { fcfa, fcfaFull, percent } from '../../domain/money';
 import { weightedAverageCost } from '../../domain/stock';
+import { UNIT_LABEL } from '../../domain/types';
 import { ScreenHeader } from '../../design-system/components/patterns';
 import {
   Button, Card, Field, SectionLabel, SelectField,
@@ -75,7 +76,7 @@ export function Purchase() {
                       label="Article"
                       value={line.itemId}
                       onChange={(v) => patch(i, { itemId: v })}
-                      options={purchasable.map((it) => ({ value: it.id, label: `${it.name} (${it.unit})` }))}
+                      options={purchasable.map((it) => ({ value: it.id, label: `${it.name} (${UNIT_LABEL[it.unit]})` }))}
                     />
                   </div>
                   {lines.length > 1 && (
@@ -95,7 +96,7 @@ export function Purchase() {
                     type="number"
                     inputMode="decimal"
                     value={line.quantity}
-                    suffix={item.unit}
+                    suffix={UNIT_LABEL[item.unit]}
                     onChange={(e) => patch(i, { quantity: Number(e.target.value) })}
                   />
                   <Field
@@ -121,7 +122,7 @@ export function Purchase() {
                     }`}
                   >
                     {drift > 0 ? '↑' : '↓'} {percent(Math.abs(drift), 1)} vs coût actuel ({fcfa(currentCost)}).
-                    Nouveau coût moyen pondéré : {fcfaFull(Math.round(newCost))} / {item.unit}.
+                    Nouveau coût moyen pondéré : {fcfaFull(Math.round(newCost))} / {UNIT_LABEL[item.unit]}.
                   </div>
                 )}
               </Card>

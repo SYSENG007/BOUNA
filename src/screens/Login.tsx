@@ -19,7 +19,7 @@ export function Login() {
           <div className="font-display text-[28px] tracking-[0.34em]">BUNA</div>
         </div>
 
-        <h1 className="font-display text-[42px] leading-[1.05]">
+        <h1 className="t-display">
           Operations
         </h1>
         <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-[#C4B5A4]">

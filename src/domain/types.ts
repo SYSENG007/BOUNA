@@ -55,6 +55,12 @@ export const UNIT_BASE: Record<Unit, { base: 'g' | 'mL' | 'unite'; factor: numbe
   carton: { base: 'unite', factor: 1 },
 };
 
+/** Libellés d'unité tels qu'on les écrit à l'écran. */
+export const UNIT_LABEL: Record<Unit, string> = {
+  kg: 'kg', g: 'g', L: 'L', mL: 'mL', unite: 'unité',
+  sachet: 'sachet', bouteille: 'bouteille', paquet: 'paquet', carton: 'carton',
+};
+
 export interface Item {
   id: UUID;
   name: string;
@@ -68,6 +74,10 @@ export interface Item {
   price?: number;
   /** Coût moyen pondéré courant (FCFA / unité). Recalculé à chaque réception. */
   weightedAvgCost?: number;
+  /** Vignette carrée (data URL en local, chemin Supabase Storage en production). */
+  imageUrl?: string;
+  /** Retiré du catalogue sans être supprimé : l'historique doit rester lisible. */
+  archived?: boolean;
 }
 
 /* -------------------------------------------------------------- Recettes */

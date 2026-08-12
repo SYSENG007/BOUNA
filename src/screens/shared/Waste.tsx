@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useBuna, LOCATIONS, LOC } from '../../store/BunaStore';
-import { WASTE_LABEL, type WasteReason } from '../../domain/types';
+import { UNIT_LABEL, WASTE_LABEL, type WasteReason } from '../../domain/types';
 import { fcfaFull } from '../../domain/money';
 import { ScreenHeader } from '../../design-system/components/patterns';
 import {
@@ -50,7 +50,7 @@ export function Waste() {
 
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-ink-700">Quantité perdue</span>
-          <NumberStepper value={quantity} onChange={setQuantity} unit={item?.unit ?? 'unités'} min={1} />
+          <NumberStepper value={quantity} onChange={setQuantity} unit={item ? UNIT_LABEL[item.unit] : 'unités'} min={1} />
         </div>
 
         <div>

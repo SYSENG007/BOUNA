@@ -56,7 +56,7 @@ export function Cockpit() {
       <div className="mx-auto max-w-5xl px-4 py-6 lg:px-10 lg:py-10">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-display text-[32px] leading-tight text-cafe lg:text-[42px]">
+            <h1 className="t-h1 text-cafe lg:text-[42px] lg:leading-[46px]">
               Bonjour {user?.name.split(' ')[0]}
             </h1>
             <p className="text-[13px] text-ink-500">
@@ -87,7 +87,7 @@ export function Cockpit() {
           <Card className="flex flex-col gap-2">
             <SectionLabel>Combien avons-nous vendu ?</SectionLabel>
             <div className="flex items-baseline gap-2">
-              <span className="num text-[36px] leading-none text-ink-900">{fcfa(m.revenue)}</span>
+              <span className="t-figure text-[36px] leading-none text-ink-900">{fcfa(m.revenue)}</span>
               <span className="text-[12px] text-ink-500">FCFA</span>
             </div>
             <div className="num text-[12px] text-ink-500">
@@ -95,21 +95,21 @@ export function Cockpit() {
             </div>
           </Card>
 
-          <Card className="flex flex-col gap-2">
+          <Card className="derived flex flex-col gap-2">
             <SectionLabel>Combien avons-nous gagné ?</SectionLabel>
             <div className="flex items-baseline gap-2">
-              <span className="num text-[36px] leading-none text-conforme-deep">{fcfa(m.gross)}</span>
+              <span className="t-figure text-[36px] leading-none text-conforme-deep">{fcfa(m.gross)}</span>
               <span className="text-[12px] text-ink-500">FCFA</span>
             </div>
             <div className="num text-[12px] text-ink-500">Marge {percent(m.marginPct)}</div>
           </Card>
 
-          <Card className="flex flex-col gap-2">
+          <Card className="derived flex flex-col gap-2">
             <SectionLabel>Où perdons-nous de l'argent ?</SectionLabel>
             <div className="flex items-baseline gap-2">
               {/* Zéro perte n'est pas une alerte : le rouge est réservé à une vraie fuite. */}
               <span
-                className={`num text-[36px] leading-none ${m.leak > 0 ? 'text-critique' : 'text-conforme-deep'}`}
+                className={`t-figure text-[36px] leading-none ${m.leak > 0 ? 'text-critique' : 'text-conforme-deep'}`}
               >
                 {m.leak > 0 ? `−${fcfa(m.leak)}` : '0'}
               </span>

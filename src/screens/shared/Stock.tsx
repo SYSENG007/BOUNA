@@ -70,7 +70,7 @@ export function Stock() {
       <SyncIndicator />
 
       <header className="px-4 pb-3 pt-4">
-        <h1 className="font-display text-[24px] leading-tight text-cafe">Stock</h1>
+        <h1 className="t-h1 text-cafe">Stock</h1>
         <p className="text-[12px] text-ink-500">Calculé depuis les mouvements · jamais saisi</p>
       </header>
 

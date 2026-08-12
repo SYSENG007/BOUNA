@@ -23,12 +23,15 @@ import { Purchase } from './screens/procurement/Purchase';
 import { GoodsReceipt } from './screens/procurement/GoodsReceipt';
 import { Finance } from './screens/finance/Finance';
 import { Alerts } from './screens/Alerts';
+import { Catalogue } from './screens/catalogue/Catalogue';
+import { InventoryCount } from './screens/shared/InventoryCount';
+import { Flow } from './screens/Flow';
 import { Profile } from './screens/Profile';
 
 /** Écrans en plein flux : pas de barre d'onglets, l'utilisateur va au bout de son geste. */
 const FULLSCREEN = [
   '/vendre/panier', '/vendre/encaissement', '/vendre/recu',
-  '/production/batch', '/stock/perte', '/cloture',
+  '/production/batch', '/stock/perte', '/stock/inventaire', '/cloture',
   '/achats/nouveau', '/achats/reception',
 ];
 
@@ -95,6 +98,9 @@ export default function App() {
 
               <Route path="/stock" element={<Stock />} />
               <Route path="/stock/perte" element={<Waste />} />
+              <Route path="/stock/inventaire" element={<InventoryCount />} />
+              <Route path="/catalogue" element={<Catalogue />} />
+              <Route path="/parcours" element={<Flow />} />
 
               <Route path="/aujourdhui" element={<Today />} />
               <Route path="/cloture" element={<Closing />} />

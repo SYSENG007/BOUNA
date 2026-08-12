@@ -57,7 +57,7 @@ export function Closing() {
         <Card className="text-center">
           <div className="label-section">Espèces comptées</div>
           <div className="mt-1 flex items-baseline justify-center gap-2">
-            <span className="num text-[40px] leading-none text-ink-900">{raw ? fcfa(counted) : '—'}</span>
+            <span className="t-figure text-[40px] leading-none text-ink-900">{raw ? fcfa(counted) : '—'}</span>
             <span className="text-[13px] text-ink-500">FCFA</span>
           </div>
         </Card>

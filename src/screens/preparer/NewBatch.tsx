@@ -105,7 +105,9 @@ export function NewBatch() {
 
         {/* Ce que le système déduit tout seul — affiché avant validation, pas après. */}
         <div>
-          <SectionLabel className="mb-2">Consommation déduite</SectionLabel>
+          <div className="derived">
+            <SectionLabel className="mb-2">Consommation déduite</SectionLabel>
+          </div>
           <Card padded={false} className="px-4 py-1">
             {version.ingredients.map((ing) => {
               const item = items.get(ing.itemId);

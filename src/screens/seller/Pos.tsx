@@ -4,7 +4,7 @@ import { useBuna, LOC } from '../../store/BunaStore';
 import { useCart } from '../CartContext';
 import { fcfa, fcfaFull } from '../../domain/money';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
-import { BunaMark } from '../../design-system/components/primitives';
+import { BunaLogo } from '../../design-system/components/BunaLogo';
 import { ProductImage } from '../../design-system/components/ProductImage';
 import { IconCart } from '../../design-system/icons';
 
@@ -52,7 +52,7 @@ export function Pos() {
             {openedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · Coffee Bar Auchan
           </p>
         </div>
-        <BunaMark size={38} />
+        <BunaLogo size={42} />
       </header>
 
       <main className="flex-1 px-3 pb-40">

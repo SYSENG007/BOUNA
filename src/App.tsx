@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { BunaProvider, useBuna } from './store/BunaStore';
 import { CartProvider } from './screens/CartContext';
 import { NAV_BY_ROLE, Sidebar, TabBar } from './design-system/components/navigation';
-import { BunaWordmark } from './design-system/components/primitives';
+import { BunaLockup } from './design-system/components/BunaLogo';
 import { SyncIndicator } from './design-system/components/SyncIndicator';
 
 import { Login } from './screens/Login';
@@ -50,7 +50,7 @@ function Shell() {
     <div className={desktopRail ? 'flex min-h-dvh bg-shell' : 'min-h-dvh bg-ivoire'}>
       {desktopRail && (
         <Sidebar items={items}>
-          <BunaWordmark subtitle="OPERATIONS · OS" light />
+          <BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />
           <div className="mt-auto">
             <SyncIndicator compact />
           </div>

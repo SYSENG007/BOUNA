@@ -1,6 +1,6 @@
 import { useBuna } from '../store/BunaStore';
 import { ROLE_LABEL } from '../domain/types';
-import { BunaMark } from '../design-system/components/primitives';
+import { BunaLogo } from '../design-system/components/BunaLogo';
 
 /**
  * Connexion.
@@ -14,9 +14,8 @@ export function Login() {
   return (
     <div className="flex min-h-dvh flex-col bg-cafe px-6 py-12 text-sable-pale">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        <div className="mb-10 flex items-center gap-4">
-          <BunaMark size={46} />
-          <div className="font-display text-[28px] tracking-[0.34em]">BUNA</div>
+        <div className="mb-9">
+          <BunaLogo size={104} surface="cafe" className="-ml-2" />
         </div>
 
         <h1 className="t-display">

@@ -5,6 +5,7 @@ import { ROLE_PERMISSIONS } from '../domain/permissions';
 import { clearState } from '../store/persist';
 import { SyncIndicator } from '../design-system/components/SyncIndicator';
 import { Badge, Button, Card, SectionLabel } from '../design-system/components/primitives';
+import { BunaLogo } from '../design-system/components/BunaLogo';
 import { deviceId } from '../domain/ids';
 
 /** Profil, état de synchronisation, permissions effectives, raccourcis. */
@@ -24,6 +25,9 @@ export function Profile() {
       <SyncIndicator />
 
       <main className="flex-1 space-y-4 px-4 pb-28 pt-4">
+        <div className="flex items-center justify-end">
+          <BunaLogo size={38} />
+        </div>
         <div className="flex items-center gap-4">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-cafe font-display text-[22px] text-sable-pale">
             {user.name.charAt(0)}

@@ -107,13 +107,18 @@ export function Cockpit() {
           <Card className="flex flex-col gap-2">
             <SectionLabel>Où perdons-nous de l'argent ?</SectionLabel>
             <div className="flex items-baseline gap-2">
-              <span className="num text-[36px] leading-none text-critique">
+              {/* Zéro perte n'est pas une alerte : le rouge est réservé à une vraie fuite. */}
+              <span
+                className={`num text-[36px] leading-none ${m.leak > 0 ? 'text-critique' : 'text-conforme-deep'}`}
+              >
                 {m.leak > 0 ? `−${fcfa(m.leak)}` : '0'}
               </span>
               <span className="text-[12px] text-ink-500">FCFA</span>
             </div>
             <div className="num text-[12px] text-ink-500">
-              Waste {fcfa(m.wasteCost)} · Caisse {m.cashVariance !== 0 ? fcfa(m.cashVariance) : '—'}
+              {m.leak > 0
+                ? `Waste ${fcfa(m.wasteCost)} · Caisse ${m.cashVariance !== 0 ? fcfa(m.cashVariance) : '—'}`
+                : 'Aucune perte constatée aujourd\'hui'}
             </div>
           </Card>
         </div>

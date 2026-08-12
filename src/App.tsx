@@ -22,6 +22,8 @@ import { Replenishment } from './screens/procurement/Replenishment';
 import { Purchase } from './screens/procurement/Purchase';
 import { GoodsReceipt } from './screens/procurement/GoodsReceipt';
 import { Finance } from './screens/finance/Finance';
+import { NewExpense } from './screens/finance/NewExpense';
+import { Transfer } from './screens/shared/Transfer';
 import { Alerts } from './screens/Alerts';
 import { Catalogue } from './screens/catalogue/Catalogue';
 import { InventoryCount } from './screens/shared/InventoryCount';
@@ -31,8 +33,8 @@ import { Profile } from './screens/Profile';
 /** Écrans en plein flux : pas de barre d'onglets, l'utilisateur va au bout de son geste. */
 const FULLSCREEN = [
   '/vendre/panier', '/vendre/encaissement', '/vendre/recu',
-  '/production/batch', '/stock/perte', '/stock/inventaire', '/cloture',
-  '/achats/nouveau', '/achats/reception',
+  '/production/batch', '/stock/perte', '/stock/inventaire', '/stock/transfert',
+  '/cloture', '/achats/nouveau', '/achats/reception', '/finance/nouvelle-depense',
 ];
 
 function Shell() {
@@ -102,6 +104,7 @@ export default function App() {
               <Route path="/stock" element={<Stock />} />
               <Route path="/stock/perte" element={<Waste />} />
               <Route path="/stock/inventaire" element={<InventoryCount />} />
+              <Route path="/stock/transfert" element={<Transfer />} />
               <Route path="/catalogue" element={<Catalogue />} />
               <Route path="/parcours" element={<Flow />} />
 
@@ -111,6 +114,7 @@ export default function App() {
 
               <Route path="/cockpit" element={<Cockpit />} />
               <Route path="/finance" element={<Finance />} />
+              <Route path="/finance/nouvelle-depense" element={<NewExpense />} />
 
               <Route path="/approvisionnement" element={<Replenishment />} />
               <Route path="/achats" element={<Replenishment />} />

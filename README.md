@@ -93,7 +93,8 @@ Le PRD décrit sept sprints. Ce dépôt couvre :
 - Notifications in-app par rôle avec action proposée
 
 **Reste à brancher**
-- Supabase réel : créer le projet, appliquer les migrations, activer Auth
+- Supabase réel : voir [docs/SUPABASE.md](docs/SUPABASE.md) — client, transport
+  transactionnel et migrations sont prêts ; il manque le projet et les clés
 - PowerSync : remplacer `src/store/persist.ts` et `outbox.ts` par le client PowerSync
 - Web Push et le moteur de règles de notification (Sprint 6)
 - Inventaire complet avec ajustements validés (§24)

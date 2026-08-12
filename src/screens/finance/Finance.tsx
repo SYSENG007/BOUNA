@@ -3,7 +3,9 @@ import { useBuna } from '../../store/BunaStore';
 import { fcfa, fcfaFull } from '../../domain/money';
 import { EXPENSE_LABEL, PAYMENT_LABEL, type ExpenseCategory } from '../../domain/types';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
-import { Card, SectionLabel, Segmented } from '../../design-system/components/primitives';
+import { Button, Card, SectionLabel, Segmented } from '../../design-system/components/primitives';
+import { useNavigate } from 'react-router-dom';
+import { IconPlus } from '../../design-system/icons';
 
 type Tab = 'EXPENSES' | 'AUDIT';
 
@@ -13,6 +15,7 @@ type Tab = 'EXPENSES' | 'AUDIT';
  */
 export function Finance() {
   const { state } = useBuna();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('EXPENSES');
   const [category, setCategory] = useState<ExpenseCategory | 'ALL'>('ALL');
 
@@ -37,14 +40,22 @@ export function Finance() {
             <h1 className="t-h1 text-cafe lg:text-[38px] lg:leading-[44px]">Finance</h1>
             <p className="text-[13px] text-ink-500">Dépenses du jour et journal d'audit</p>
           </div>
-          <Segmented
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'EXPENSES', label: 'Dépenses' },
-              { value: 'AUDIT', label: 'Audit' },
-            ]}
-          />
+          <div className="flex items-center gap-2">
+            <Segmented
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'EXPENSES', label: 'Dépenses' },
+                { value: 'AUDIT', label: 'Audit' },
+              ]}
+            />
+            {tab === 'EXPENSES' && (
+              <Button variant="primary" size="compact" onClick={() => navigate('/finance/nouvelle-depense')}>
+                <IconPlus size={15} />
+                Dépense
+              </Button>
+            )}
+          </div>
         </header>
 
         {tab === 'EXPENSES' ? (

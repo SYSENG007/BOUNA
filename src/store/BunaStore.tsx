@@ -11,6 +11,8 @@ import { deviceId, uuid, batchCode } from '../domain/ids';
 import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
 import { pendingEvents, localTransport } from './outbox';
+import { isBackendConfigured } from '../backend/supabase';
+import { supabaseTransport } from '../backend/transport';
 import { evaluateRules, type Cooldowns } from '../domain/rules';
 import { loadState, saveState } from './persist';
 import {
@@ -728,7 +730,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     setSyncing(true);
     dispatch({ type: 'SET_SYNC', ids: queue.map((e) => e.id), status: 'SYNCING' });
     try {
-      const { acceptedIds, failedIds } = await localTransport(queue);
+      // Backend branché → RPC transactionnelles ; sinon, file locale.
+      const transport = isBackendConfigured ? supabaseTransport : localTransport;
+      const { acceptedIds, failedIds } = await transport(queue);
       if (acceptedIds.length) dispatch({ type: 'SET_SYNC', ids: acceptedIds, status: 'SYNCED' });
       if (failedIds.length) dispatch({ type: 'SET_SYNC', ids: failedIds, status: 'FAILED' });
       setLastSyncAt(new Date().toISOString());

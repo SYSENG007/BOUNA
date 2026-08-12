@@ -75,6 +75,11 @@ export function Stock() {
       </header>
 
       <div className="space-y-3 px-4 pb-3">
+        <div className="flex gap-2">
+          <Button size="compact" className="flex-1" onClick={() => navigate('/stock/transfert')}>Transférer</Button>
+          <Button size="compact" className="flex-1" onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
+          <Button size="compact" className="flex-1" onClick={() => navigate('/stock/perte')}>Perte</Button>
+        </div>
         <Field label="" placeholder="Rechercher un article" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="-mx-4 overflow-x-auto px-4">
           <Segmented value={filter} onChange={setFilter} options={FILTERS} />

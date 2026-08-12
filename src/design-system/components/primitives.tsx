@@ -287,13 +287,7 @@ export function Segmented<T extends string>({
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-      <img
-        src="/brand/buna-logo.svg"
-        alt=""
-        width={52}
-        height={52}
-        className="rounded-[8px] opacity-90 ring-1 ring-ink-200"
-      />
+      <img src="/brand/buna-logo-mark.svg" alt="" width={56} height={56} />
       <div className="font-display text-[20px] text-cafe">{title}</div>
       <p className="max-w-xs text-[14px] leading-relaxed text-ink-500">{body}</p>
       {action}

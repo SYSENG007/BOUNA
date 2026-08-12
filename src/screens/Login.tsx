@@ -15,7 +15,7 @@ export function Login() {
     <div className="flex min-h-dvh flex-col bg-cafe px-6 py-12 text-sable-pale">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="mb-9">
-          <BunaLogo size={104} surface="cafe" className="-ml-2" />
+          <BunaLogo size={104} className="-ml-2" />
         </div>
 
         <h1 className="t-display">

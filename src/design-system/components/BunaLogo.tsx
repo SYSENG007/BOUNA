@@ -1,39 +1,26 @@
 import clsx from 'clsx';
 
 /**
- * Le logo BUNA.
+ * Le logo BUNA — l'emblème détouré, posé directement sur le fond.
  *
- * Le fichier fourni est un emblème détaillé — caféier, rehauts crème et or —
- * posé sur un carré sombre. Deux usages, deux fichiers :
- *
- * · surface claire  → la tuile d'origine, arrondie. Les rehauts crème ont besoin
- *                     de leur fond sombre pour exister.
- * · surface café    → la version détourée, posée directement sur le brun.
- *
- * En dessous de 32 px l'illustration devient illisible : on lui préfère alors
+ * Pas de tuile, pas de cadre : le caféier vit sur la surface de l'écran.
+ * En dessous de 32 px l'illustration devient illisible ; on lui préfère alors
  * la pastille de marque (`BunaMark`).
  */
 export function BunaLogo({
   size = 44,
-  surface = 'light',
   className,
 }: {
   size?: number;
-  surface?: 'light' | 'cafe';
   className?: string;
 }) {
-  const src = surface === 'cafe' ? '/brand/buna-logo-mark.svg' : '/brand/buna-logo.svg';
   return (
     <img
-      src={src}
+      src="/brand/buna-logo-mark.svg"
       alt="BUNA"
       width={size}
       height={size}
-      className={clsx(
-        'shrink-0 select-none',
-        surface === 'light' && 'rounded-[8px] ring-1 ring-ink-200',
-        className,
-      )}
+      className={clsx('shrink-0 select-none', className)}
       style={{ width: size, height: size }}
     />
   );
@@ -54,7 +41,7 @@ export function BunaLockup({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <BunaLogo size={size} surface={surface} />
+      <BunaLogo size={size} />
       <div>
         {/* L'emblème porte le mot à grande taille ; en petit, le mot le relaie. */}
         {size < 48 && (

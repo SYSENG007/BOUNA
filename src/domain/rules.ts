@@ -14,7 +14,13 @@ import { uuid } from './ids';
  * vers un worker Supabase consommera la même table de règles.
  */
 
-/** Dernier déclenchement par clé de portée : `règle:cible`. */
+/**
+ * Dernier déclenchement par clé de portée : `règle:cible`.
+ *
+ * `cooldownMinutes: 0` signifie « une seule fois » et non « à chaque
+ * évaluation » : le moteur est réévalué après chaque mouvement, et une règle
+ * qui se redéclenche sans limite provoquerait une boucle de rendu.
+ */
 export type Cooldowns = Record<string, { firedAt: number; severity: Severity }>;
 
 interface Candidate {
@@ -133,7 +139,8 @@ export function evaluateRules(
     if (previous) {
       const elapsedMin = (now - previous.firedAt) / 60_000;
       const worsened = SEVERITY_RANK[c.severity] > SEVERITY_RANK[previous.severity];
-      if (!worsened && elapsedMin < c.cooldownMinutes) continue;
+      const silenced = c.cooldownMinutes === 0 || elapsedMin < c.cooldownMinutes;
+      if (!worsened && silenced) continue;
     }
 
     nextCooldowns[c.scopeKey] = { firedAt: now, severity: c.severity };

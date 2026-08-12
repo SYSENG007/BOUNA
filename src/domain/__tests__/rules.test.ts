@@ -78,6 +78,18 @@ describe('Écart de caisse et pertes', () => {
     expect(notifications[0].actionTarget).toBe('/cloture');
   });
 
+  it('ne se répète pas quand le cooldown vaut 0', () => {
+    // 0 signifie « une seule fois », pas « à chaque évaluation » : sinon le
+    // moteur, réévalué après chaque mouvement, boucle indéfiniment.
+    const t0 = Date.now();
+    const input = { ...at(24), cashVariance: -7000 };
+    const first = evaluateRules(input, {}, t0);
+    expect(first.notifications).toHaveLength(1);
+
+    const again = evaluateRules(input, first.cooldowns, t0 + 6 * 3600_000);
+    expect(again.notifications).toHaveLength(0);
+  });
+
   it('reste muet sous le seuil', () => {
     expect(evaluateRules({ ...at(24), cashVariance: -500 }, {}).notifications).toHaveLength(0);
   });

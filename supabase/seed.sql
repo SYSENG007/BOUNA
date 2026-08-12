@@ -53,8 +53,8 @@ insert into items (id, organization_id, name, kind, unit, minimum_stock, target_
 on conflict (id) do nothing;
 
 -- Profils --------------------------------------------------------------
--- Créez d'abord les comptes dans Authentication → Users, avec ces e-mails.
--- Ce bloc les rattache ensuite automatiquement, sans copier d'UUID à la main.
+-- Depuis la migration 0005, le profil se crée automatiquement avec le compte
+-- Auth. Ce bloc ne sert plus qu'à rattraper des comptes créés auparavant.
 
 insert into profiles (id, organization_id, site_id, name, role)
 select u.id,

@@ -44,7 +44,7 @@ const FULLSCREEN = [
 import { useAdaptive } from './design-system/hooks/useAdaptive';
 
 function Shell() {
-  const { user } = useBuna();
+  const { user, logout } = useBuna();
   const { pathname } = useLocation();
   const { isMobile } = useAdaptive();
 

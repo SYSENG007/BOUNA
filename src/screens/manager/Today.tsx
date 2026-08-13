@@ -68,7 +68,7 @@ export function Today() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiTile label="Commandes" value={String(kpi.orders)} />
           <KpiTile label="Produits vendus" value={String(kpi.units)} />
           <KpiTile label="Panier moyen" value={fcfa(kpi.basket)} unit="FCFA" />
@@ -100,7 +100,7 @@ export function Today() {
         )}
       </main>
 
-      <div className="safe-b fixed inset-x-0 z-30 px-4 pb-2" style={{ bottom: 'var(--spacing-tabbar)' }}>
+      <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
         <Button variant="primary" size="counter" full onClick={() => navigate('/cloture')}>
           Clôturer la journée
         </Button>

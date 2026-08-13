@@ -170,3 +170,45 @@
 /* Sécurise les encoches iOS pour la barre d'onglets et les en-têtes. */
 .safe-b { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .safe-t { padding-top: env(safe-area-inset-top, 0px); }
+
+/* ------------------------------------------------------------------
+   COQUE — rail latéral au bureau, barre d'onglets au comptoir.
+   Deux variables portent la bascule. Tout ce qui est ancré au bas de
+   l'écran s'y réfère, pour qu'aucune barre d'action ne passe sous le
+   rail ni ne réserve de la place pour une barre d'onglets absente.
+   ------------------------------------------------------------------ */
+:root {
+  --nav-rail: 0px;                    /* largeur du rail latéral */
+  --tabbar-h: var(--spacing-tabbar);  /* réserve de scroll sous le contenu */
+  --content-max: 1180px;              /* la colonne de travail ne s'étire pas */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --nav-rail: 268px;
+    --tabbar-h: 0px;
+  }
+}
+
+/* La colonne de travail : pleine largeur au terrain, centrée au bureau. */
+.shell-canvas { width: 100%; }
+
+@media (min-width: 1024px) {
+  .shell-canvas {
+    max-width: var(--content-max);
+    margin-inline: auto;
+  }
+}
+
+/*
+ * Barre d'action ancrée. Elle démarre après le rail et se cale exactement
+ * sur la colonne de contenu : le bouton reste sous la main qui vient de
+ * lire la ligne à laquelle il répond.
+ */
+.rail-bar {
+  --rail-gutter: max(0px, (100% - var(--nav-rail) - var(--content-max)) / 2);
+  position: fixed;
+  left: calc(var(--nav-rail) + var(--rail-gutter));
+  right: var(--rail-gutter);
+  padding-inline: 1rem;
+}

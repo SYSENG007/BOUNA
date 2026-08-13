@@ -60,7 +60,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
  */
 export function TabBar({ items }: { items: NavItem[] }) {
   return (
-    <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/97 backdrop-blur lg:sticky">
+    <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/97 backdrop-blur lg:hidden">
       <div className="flex">
         {items.map(({ to, label, Icon }) => (
           <NavLink
@@ -93,16 +93,30 @@ export function TabBar({ items }: { items: NavItem[] }) {
   );
 }
 
-/** Rail desktop — registre « brand » : fond café, respiration large. */
-export function Sidebar({ items, children }: { items: NavItem[]; children?: ReactNode }) {
+/**
+ * Rail de bureau — registre « marque » : fond café, respiration large.
+ * Sa largeur vient de --nav-rail, la même variable dont dépendent les
+ * barres d'action ancrées : les deux ne peuvent pas diverger.
+ */
+export function Sidebar({
+  items, brand, footer,
+}: {
+  items: NavItem[];
+  brand?: ReactNode;
+  footer?: ReactNode;
+}) {
   return (
-    <aside className="sticky top-0 hidden h-screen w-[268px] shrink-0 flex-col gap-8 overflow-y-auto bg-cafe px-5 py-8 text-sable-pale lg:flex">
-      {children}
+    <aside
+      className="sticky top-0 hidden h-screen shrink-0 flex-col gap-8 overflow-y-auto bg-cafe px-5 py-8 text-sable-pale lg:flex"
+      style={{ width: 'var(--nav-rail)' }}
+    >
+      {brand}
       <nav className="flex flex-col gap-0.5">
         {items.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
+            end={to === '/production'}
             className={({ isActive }) =>
               clsx(
                 'relative flex min-h-[46px] items-center gap-3 rounded-[6px] px-3 text-[14px]',
@@ -118,13 +132,14 @@ export function Sidebar({ items, children }: { items: NavItem[]; children?: Reac
                 {isActive && (
                   <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-or" />
                 )}
-                <Icon size={19} />
+                <Icon size={19} strokeWidth={isActive ? 1.8 : 1.6} />
                 {label}
               </>
             )}
           </NavLink>
         ))}
       </nav>
+      {footer && <div className="mt-auto flex flex-col gap-4">{footer}</div>}
     </aside>
   );
 }

@@ -56,7 +56,7 @@ export function Pos() {
       </header>
 
       <main className="flex-1 px-3 pb-40">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => {
             const qty = cart[p.id] ?? 0;
             const available = stockOf(p.id, LOC.POS);
@@ -105,7 +105,7 @@ export function Pos() {
 
       {/* Panier flottant : le total est toujours visible, l'action toujours à portée de pouce. */}
       {count > 0 && (
-        <div className="safe-b fixed inset-x-0 z-30 px-3 pb-2" style={{ bottom: 'var(--spacing-tabbar)' }}>
+        <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
           <button
             onClick={() => navigate('/vendre/panier')}
             className="no-select flex min-h-[56px] w-full items-center justify-between gap-3 rounded-[8px] bg-cafe px-5 text-sable-pale"

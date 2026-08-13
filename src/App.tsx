@@ -4,6 +4,7 @@ import { CartProvider } from './screens/CartContext';
 import { NAV_BY_ROLE, Sidebar, TabBar } from './design-system/components/navigation';
 import { BunaLockup } from './design-system/components/BunaLogo';
 import { SyncIndicator } from './design-system/components/SyncIndicator';
+import { ROLE_LABEL } from './domain/types';
 
 import { Login } from './screens/Login';
 import { Pos } from './screens/seller/Pos';
@@ -45,32 +46,35 @@ function Shell() {
 
   const items = NAV_BY_ROLE[user.role];
   const immersive = FULLSCREEN.includes(pathname);
-  /* Owner et Finance travaillent assis : rail latéral dès le desktop. */
-  const desktopRail = user.role === 'OWNER' || user.role === 'FINANCE';
 
   return (
-    <div className={desktopRail ? 'flex min-h-dvh bg-shell' : 'min-h-dvh bg-ivoire'}>
-      {desktopRail && (
-        <Sidebar items={items}>
-          <BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />
-          <div className="mt-auto">
+    <div className="flex min-h-dvh bg-shell">
+      {/* Au bureau on travaille assis, avec de la place : le rail remplace la
+          barre d'onglets pour tous les rôles, pas seulement les rôles analystes. */}
+      <Sidebar
+        items={items}
+        brand={<BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
+        footer={
+          <>
+            <div className="border-t border-[#4A362A] pt-4">
+              <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
+              <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
+                {ROLE_LABEL[user.role].toUpperCase()}
+              </div>
+            </div>
             <SyncIndicator compact />
-          </div>
-        </Sidebar>
-      )}
+          </>
+        }
+      />
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         <div
-          className="flex flex-1 flex-col"
-          style={!immersive ? { paddingBottom: 'var(--spacing-tabbar)' } : undefined}
+          className="shell-canvas flex flex-1 flex-col"
+          style={!immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
         >
           <Outlet />
         </div>
-        {!immersive && (
-          <div className={desktopRail ? 'lg:hidden' : undefined}>
-            <TabBar items={items} />
-          </div>
-        )}
+        {!immersive && <TabBar items={items} />}
       </div>
     </div>
   );

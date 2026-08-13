@@ -100,7 +100,7 @@ export function Payment() {
         )}
       </main>
 
-      <div className="safe-b fixed inset-x-0 bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 px-4 py-3 backdrop-blur">
+      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
         <Button variant="primary" size="counter" full onClick={submit} disabled={busy}>
           Valider — {PAYMENT_LABEL[method]}
         </Button>

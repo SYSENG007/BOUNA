@@ -969,7 +969,7 @@ export function supplierAnalytics(
     }));
 
     const ordered = items.reduce(
-      (s, i) => s + (i.fillRatePct.hasData && i.quantityOrdered !== null ? i.quantityOrdered : 0),
+      (s, i) => s + (i.fillRatePct.hasData && i.quantityExpected !== null ? i.quantityExpected : 0),
       0,
     );
     const got = items.reduce(

@@ -1,6 +1,6 @@
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState,
-  type ReactNode,
+  createContext, Fragment, useCallback, useContext, useEffect, useMemo, useReducer, useRef,
+  useState, type ReactNode,
 } from 'react';
 import type {
   AuditEvent, CashSession, DomainEvent, Expense, Item, Notification, PaymentMethod,
@@ -10,15 +10,20 @@ import type {
 import { deviceId, uuid, batchCode } from '../domain/ids';
 import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
-import { pendingEvents, localTransport } from './outbox';
+import { dueEvents, pendingEvents, selectTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
 import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
 import { supabaseTransport } from '../backend/transport';
+import { crossCheckStock, fetchSnapshot, type Snapshot } from '../backend/hydrate';
 import { evaluateRules, type Cooldowns } from '../domain/rules';
 import { loadState, saveState } from './persist';
 import {
-  ITEMS, LOC, LOCATIONS, ORG_ID, RECIPES, RECIPE_VERSIONS, SEED_AUDIT, SEED_CASH_SESSION,
-  SEED_EXPENSES, SEED_MOVEMENTS, SEED_NOTIFICATIONS, SEED_PURCHASES, SITE, SUPPLIERS, USERS,
+  applyReferentials, aliasEntries, resolveId, signature,
+  LOC, LOCATIONS, RECIPES, RECIPE_VERSIONS, SITE, SUPPLIERS, USERS,
+} from './referentials';
+import {
+  ITEMS, SEED_AUDIT, SEED_CASH_SESSION, SEED_EXPENSES, SEED_MOVEMENTS,
+  SEED_NOTIFICATIONS, SEED_PURCHASES,
 } from '../domain/seed';
 
 /* ------------------------------------------------------------------ État */
@@ -64,6 +69,8 @@ type Action =
   | { type: 'LOGIN'; userId: UUID }
   | { type: 'LOGOUT' }
   | { type: 'HYDRATE'; state: State }
+  /** Remplacement de l'état local par ce que PostgreSQL sait réellement. */
+  | { type: 'HYDRATE_SNAPSHOT'; snapshot: Snapshot }
   /** Transaction métier atomique (§81) : tout ou rien, en une seule réduction. */
   | {
       type: 'COMMIT';
@@ -90,6 +97,48 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'HYDRATE':
       return action.state;
+
+    case 'HYDRATE_SNAPSHOT': {
+      const s = action.snapshot;
+
+      // Les alertes ne sont pas des faits serveur : elles découlent de l'état et
+      // de leur cooldown. Les écraser par une liste serveur vide effacerait des
+      // alertes que le moteur ne relèverait pas — leur cooldown est consommé.
+      const knownNotifications = new Set(s.notifications.map((n) => n.id));
+      const notifications = [
+        ...s.notifications,
+        ...state.notifications.filter((n) => !knownNotifications.has(n.id)),
+      ];
+
+      // Le journal serveur fait foi, mais rien de ce qui n'est pas encore parti
+      // ne doit disparaître : la file d'attente est la mémoire du comptoir.
+      const knownEvents = new Set(s.events.map((e) => e.id));
+      const events = [
+        ...state.events.filter((e) => !knownEvents.has(e.id) && e.syncStatus !== 'SYNCED'),
+        ...s.events,
+      ];
+
+      return {
+        ...state,
+        items: s.items,
+        // RULE-002 : ce sont bien des mouvements qui arrivent, pas des niveaux.
+        movements: s.movements,
+        sales: s.sales,
+        expenses: s.expenses,
+        waste: s.waste,
+        batches: s.batches,
+        purchases: s.purchases,
+        cashSession: s.cashSession ?? state.cashSession,
+        notifications,
+        // RLS ne montre l'audit qu'à l'encadrement : une liste vide côté serveur
+        // veut souvent dire « pas le droit », pas « rien ne s'est passé ».
+        audit: s.audit.length ? s.audit : state.audit,
+        events,
+        saleCounter: s.saleCounter,
+        batchCounter: Math.max(state.batchCounter, s.batches.length),
+      };
+    }
+
     case 'LOGIN':
       return { ...state, currentUserId: action.userId };
     case 'LOGOUT':
@@ -187,7 +236,13 @@ interface Ctx {
   /** Vrai tant que la session n'a pas été restaurée au démarrage. */
   authLoading: boolean;
   backendConfigured: boolean;
+  /** Vrai pendant qu'un instantané PostgreSQL est en cours de chargement. */
+  hydrating: boolean;
+  /** Dernier instantané serveur appliqué. Null : l'app tourne sur son état local. */
+  hydratedAt: string | null;
   syncNow: () => Promise<void>;
+  /** Force un rechargement depuis PostgreSQL au prochain passage. */
+  refresh: () => void;
   /** Enregistre une vente et tout ce qu'elle implique, en une transaction. */
   completeSale: (
     lines: { item: Item; quantity: number }[],
@@ -245,7 +300,16 @@ export function BunaProvider({ children }: { children: ReactNode }) {
    */
   const [state, dispatch] = useReducer(reducer, initialState, (base) => {
     const saved = loadState<Partial<State>>();
-    return saved ? { ...base, ...saved } : base;
+    if (!saved) return base;
+    /*
+     * Un événement resté en SYNCING est un événement dont l'app est morte en
+     * plein envoi. SYNCING ne fait pas partie des statuts réessayés : sans
+     * cette remise à QUEUED il resterait invisible et jamais renvoyé.
+     */
+    const events = saved.events?.map((e) =>
+      e.syncStatus === 'SYNCING' ? { ...e, syncStatus: 'QUEUED' as const } : e,
+    );
+    return { ...base, ...saved, ...(events ? { events } : {}) };
   });
   const [online, setOnline] = useState(navigator.onLine);
   const [syncing, setSyncing] = useState(false);
@@ -253,6 +317,25 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   /* Profil issu de Supabase. Prend le pas sur les profils de démonstration. */
   const [remoteProfile, setRemoteProfile] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(isBackendConfigured);
+  const [hydrating, setHydrating] = useState(false);
+  const [hydratedAt, setHydratedAt] = useState<string | null>(null);
+  /*
+   * Signature des référentiels. Elle sert de clé de remontage : plusieurs
+   * écrans figent un emplacement dans un `useState` au premier rendu, et ces
+   * valeurs-là ne peuvent pas être corrigées par un simple nouveau rendu.
+   */
+  const [referentials, setReferentials] = useState(signature);
+  const [refreshToken, setRefreshToken] = useState(0);
+  /* Vrai tant qu'un instantané serveur reste à charger. */
+  const stale = useRef(true);
+  const hydratingRef = useRef(false);
+  const syncingRef = useRef(false);
+  /*
+   * Dernière tentative d'envoi, par événement. Hors état React : c'est de la
+   * mécanique de file, pas de l'information métier, et ce n'est volontairement
+   * pas persisté — au redémarrage tout redevient immédiatement envoyable.
+   */
+  const lastAttemptAt = useRef(new Map<UUID, number>());
   /* Toute évolution d'état est persistée : l'app doit rouvrir sans réseau (§99). */
   useEffect(() => {
     saveState(state);
@@ -269,12 +352,29 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const itemsMap = useMemo(() => new Map(state.items.map((i) => [i.id, i])), [state.items]);
+  /*
+   * Le catalogue est indexé par son identifiant réel ET par l'identifiant de
+   * démonstration correspondant : quelques écrans nomment encore un article en
+   * dur (`items.get('it-vanilla')!`). L'article rendu est le vrai — seule la
+   * clé de lecture est ancienne.
+   */
+  const itemsMap = useMemo(() => {
+    const map = new Map<UUID, Item>(state.items.map((i) => [i.id, i]));
+    for (const [legacy, real] of aliasEntries()) {
+      const target = map.get(real);
+      if (target && !map.has(legacy)) map.set(legacy, target);
+    }
+    return map;
+  }, [state.items, referentials]);
+
   const stock = useMemo(() => projectStock(state.movements, itemsMap), [state.movements, itemsMap]);
   const user = useMemo(
     () => remoteProfile ?? USERS.find((u) => u.id === state.currentUserId) ?? null,
     [remoteProfile, state.currentUserId],
   );
+  /* Organisation et site viennent du profil réel dès qu'il est connu (§73). */
+  const orgId = user?.organizationId ?? SITE.organizationId;
+  const siteId = user?.siteId ?? SITE.id;
 
   /* Reprise de session au démarrage — fonctionne aussi hors ligne, via le cache. */
   useEffect(() => {
@@ -288,7 +388,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const pending = pendingEvents(state.events).length;
 
   const stockOf = useCallback(
-    (itemId: UUID, locationId?: UUID) => {
+    (rawItemId: UUID, rawLocationId?: UUID) => {
+      const itemId = resolveId(rawItemId);
+      const locationId = resolveId(rawLocationId);
       if (locationId) return stock.get(`${itemId}@${locationId}`) ?? 0;
       let total = 0;
       for (const [key, value] of stock) if (key.startsWith(`${itemId}@`)) total += value;
@@ -302,8 +404,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const makeEvent = useCallback(
     <P,>(eventType: EventType, entityType: string, entityId: UUID, payload: P): DomainEvent<P> => ({
       id: uuid(), // §56 — clé d'idempotence générée AVANT tout contact serveur
-      organizationId: ORG_ID,
-      siteId: SITE.id,
+      organizationId: orgId,
+      siteId: siteId,
       eventType,
       entityType,
       entityId,
@@ -315,19 +417,20 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       syncStatus: navigator.onLine ? 'QUEUED' : 'LOCAL_ONLY',
       attempts: 0,
     }),
-    [user],
+    [user, orgId, siteId],
   );
 
   const makeMovement = useCallback(
     (
-      itemId: UUID, locationId: UUID, quantity: number, unit: Unit,
+      rawItemId: UUID, rawLocationId: UUID, quantity: number, unit: Unit,
       movementType: StockMovement['movementType'], referenceType: string, referenceId: UUID,
     ): StockMovement => ({
       id: uuid(),
-      organizationId: ORG_ID,
-      siteId: SITE.id,
-      locationId,
-      itemId,
+      organizationId: orgId,
+      siteId: siteId,
+      // Un mouvement n'entre jamais en base avec un identifiant de démonstration.
+      locationId: resolveId(rawLocationId),
+      itemId: resolveId(rawItemId),
       quantity,
       unit,
       movementType,
@@ -337,7 +440,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       deviceId: deviceId(),
       createdAt: new Date().toISOString(),
     }),
-    [user],
+    [user, orgId, siteId],
   );
 
   const makeAudit = useCallback(
@@ -361,7 +464,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       if (!cartLines.length || !user) return null;
 
       const lines: SaleLine[] = cartLines.map(({ item, quantity }) => ({
-        itemId: item.id,
+        itemId: resolveId(item.id),
         name: item.name,
         quantity,
         unitPrice: item.price ?? 0,
@@ -375,7 +478,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       const sale: Sale = {
         id: saleId,
         number: state.saleCounter + 1,
-        siteId: SITE.id,
+        siteId: siteId,
         locationId: LOC.POS,
         cashSessionId: state.cashSession.id,
         sellerId: user.id,
@@ -398,7 +501,22 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           makeMovement(l.itemId, LOC.POS, -l.quantity, 'unite', 'SALE', 'Sale', saleId),
         ),
         events: [
-          makeEvent('SALE_COMPLETED', 'Sale', saleId, { total, cogs, lines }),
+          /*
+           * Le payload porte TOUT ce dont `complete_sale` a besoin. Il ne
+           * décrit pas seulement ce qui a été vendu : il décrit où, à quelle
+           * caisse et comment c'est payé. Un payload incomplet ne se voit pas
+           * localement — il ne se voit qu'en base, sous forme de vente absente.
+           */
+          makeEvent('SALE_COMPLETED', 'Sale', saleId, {
+            number: sale.number,
+            locationId: LOC.POS,
+            cashSessionId: state.cashSession.id,
+            paymentMethod,
+            amountReceived,
+            total,
+            cogs,
+            lines,
+          }),
           makeEvent('PAYMENT_RECEIVED', 'Sale', saleId, { paymentMethod, amount: total }),
         ],
         audit: [
@@ -412,7 +530,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
       return sale;
     },
-    [user, state.saleCounter, state.cashSession.id, makeEvent, makeMovement, makeAudit],
+    [user, siteId, state.saleCounter, state.cashSession.id, makeEvent, makeMovement, makeAudit],
   );
 
   const voidSale = useCallback<Ctx['voidSale']>(
@@ -434,10 +552,13 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   );
 
   const completeBatch = useCallback<Ctx['completeBatch']>(
-    ({ itemId, recipeVersionId, planned, produced, loss, locationId }) => {
+    ({ itemId: rawItemId, recipeVersionId, planned, produced, loss, locationId: rawLocationId }) => {
       const version = RECIPE_VERSIONS.find((v) => v.id === recipeVersionId);
       if (!version || !user) return;
 
+      // L'écran de production nomme encore le produit en dur : on le traduit.
+      const itemId = resolveId(rawItemId);
+      const locationId = resolveId(rawLocationId);
       const id = uuid();
       const code = batchCode(new Date(), state.batchCounter + 1);
 
@@ -476,9 +597,11 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   );
 
   const recordWaste = useCallback<Ctx['recordWaste']>(
-    ({ itemId, locationId, quantity, reason }) => {
-      const item = itemsMap.get(itemId);
+    ({ itemId: rawItemId, locationId: rawLocationId, quantity, reason }) => {
+      const item = itemsMap.get(rawItemId);
       if (!item) return;
+      const itemId = resolveId(rawItemId);
+      const locationId = resolveId(rawLocationId);
       const id = uuid();
       const cost = quantity * (item.weightedAvgCost ?? 0);
 
@@ -592,29 +715,36 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   );
 
   const receiveGoods = useCallback<Ctx['receiveGoods']>(
-    ({ supplierId, locationId, lines, transportCost, paymentMethod }) => {
+    ({ supplierId: rawSupplierId, locationId: rawLocationId, lines, transportCost, paymentMethod }) => {
       if (!lines.length) return;
+      const supplierId = resolveId(rawSupplierId);
+      const locationId = resolveId(rawLocationId);
       const purchaseId = uuid();
       const goods = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
 
       const movements: StockMovement[] = [];
       const itemCosts: { itemId: UUID; cost: number }[] = [];
+      /* Lignes telles qu'elles partiront au serveur : identifiants réels, unité incluse. */
+      const eventLines: { itemId: UUID; quantity: number; unit: Unit; unitPrice: number }[] = [];
 
       for (const line of lines) {
         const item = itemsMap.get(line.itemId);
         if (!item || line.quantity <= 0) continue;
+        const itemId = resolveId(line.itemId);
 
         movements.push(
           makeMovement(
-            line.itemId, locationId, line.quantity, item.unit,
+            itemId, locationId, line.quantity, item.unit,
             'PURCHASE_RECEIPT', 'GoodsReceipt', purchaseId,
           ),
         );
 
+        eventLines.push({ itemId, quantity: line.quantity, unit: item.unit, unitPrice: line.unitPrice });
+
         // §40 — le nouveau coût moyen se calcule sur le stock AVANT réception.
-        const currentQty = stock.get(`${line.itemId}@${locationId}`) ?? 0;
+        const currentQty = stock.get(`${itemId}@${locationId}`) ?? 0;
         itemCosts.push({
-          itemId: line.itemId,
+          itemId,
           cost: Math.round(
             weightedAverageCost(currentQty, item.weightedAvgCost ?? 0, line.quantity, line.unitPrice),
           ),
@@ -629,16 +759,13 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         itemCosts,
         purchase: {
           id: purchaseId, supplierId, locationId,
-          lines: lines.map((l) => {
-            const item = itemsMap.get(l.itemId);
-            return {
-              itemId: l.itemId,
-              quantity: l.quantity,
-              unit: (item?.unit ?? 'unite') as Unit,
-              actualUnitPrice: l.unitPrice,
-              expectedUnitPrice: item?.weightedAvgCost,
-            };
-          }),
+          lines: eventLines.map((l) => ({
+            itemId: l.itemId,
+            quantity: l.quantity,
+            unit: l.unit,
+            actualUnitPrice: l.unitPrice,
+            expectedUnitPrice: itemsMap.get(l.itemId)?.weightedAvgCost,
+          })),
           transportCost,
           total: goods + transportCost,
           paymentMethod,
@@ -656,7 +783,11 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           userId: user?.id ?? 'unknown',
           createdAt: new Date().toISOString(),
         },
-        events: [makeEvent('GOODS_RECEIVED', 'GoodsReceipt', purchaseId, { supplierId, lines, transportCost })],
+        events: [
+          makeEvent('GOODS_RECEIVED', 'GoodsReceipt', purchaseId, {
+            supplierId, locationId, paymentMethod, transportCost, lines: eventLines,
+          }),
+        ],
         audit: [
           makeAudit(
             `Réception — ${supplierName}`,
@@ -744,23 +875,105 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   /* ----------------------------------------------------------- Sync */
 
   const syncNow = useCallback(async () => {
-    const queue = pendingEvents(state.events);
-    if (!queue.length || syncing || !navigator.onLine) return;
+    // Le verrou est un ref, pas un état : deux déclencheurs (retour de réseau et
+    // timer) peuvent tomber dans le même tour de rendu, avant que `syncing` ne
+    // soit repeint — et enverraient alors la même vente deux fois.
+    if (syncingRef.current || !navigator.onLine) return;
+    const queue = dueEvents(state.events, lastAttemptAt.current);
+    if (!queue.length) return;
+
+    syncingRef.current = true;
     setSyncing(true);
+    const startedAt = Date.now();
+    for (const event of queue) lastAttemptAt.current.set(event.id, startedAt);
     dispatch({ type: 'SET_SYNC', ids: queue.map((e) => e.id), status: 'SYNCING' });
+
     try {
-      // Backend branché → RPC transactionnelles ; sinon, file locale.
-      const transport = isBackendConfigured ? supabaseTransport : localTransport;
-      const { acceptedIds, failedIds } = await transport(queue);
-      if (acceptedIds.length) dispatch({ type: 'SET_SYNC', ids: acceptedIds, status: 'SYNCED' });
+      const transport = selectTransport(isBackendConfigured, supabaseTransport);
+      const { acceptedIds, failedIds, conflictIds = [] } = await transport(queue);
+
+      if (acceptedIds.length) {
+        dispatch({ type: 'SET_SYNC', ids: acceptedIds, status: 'SYNCED' });
+        for (const id of acceptedIds) lastAttemptAt.current.delete(id);
+        // Ce que le serveur vient d'accepter, il l'a peut-être enrichi
+        // (numéro de vente, coût moyen recalculé) : on redemandera l'état.
+        stale.current = true;
+      }
+      // Réessayable : réseau coupé, serveur indisponible.
       if (failedIds.length) dispatch({ type: 'SET_SYNC', ids: failedIds, status: 'FAILED' });
+      // Refusé pour une raison métier : rejouer donnerait le même refus.
+      if (conflictIds.length) dispatch({ type: 'SET_SYNC', ids: conflictIds, status: 'CONFLICT' });
+
       setLastSyncAt(new Date().toISOString());
     } catch {
       dispatch({ type: 'SET_SYNC', ids: queue.map((e) => e.id), status: 'FAILED' });
     } finally {
+      syncingRef.current = false;
       setSyncing(false);
     }
-  }, [state.events, syncing]);
+  }, [state.events]);
+
+  /* ---------------------------------------------------- Hydratation */
+
+  /**
+   * Chargement de l'état réel depuis PostgreSQL.
+   *
+   * Deux règles gouvernent ce bloc.
+   *
+   * D'abord, on n'attend jamais le réseau pour afficher : l'état local est déjà
+   * à l'écran quand cette fonction démarre, et il le reste si elle échoue.
+   *
+   * Ensuite, on ne remplace l'état local que lorsque la file d'attente est
+   * vide. Sinon, une vente saisie hors ligne et pas encore partie serait
+   * effacée par un instantané serveur qui ne la connaît pas encore.
+   */
+  useEffect(() => {
+    if (!isBackendConfigured || !remoteProfile || !online) return;
+    if (!stale.current || hydratingRef.current) return;
+    if (pending > 0) return;
+
+    hydratingRef.current = true;
+    setHydrating(true);
+    let cancelled = false;
+
+    void fetchSnapshot(remoteProfile)
+      .then((snapshot) => {
+        if (cancelled || !snapshot) return;
+
+        // Les référentiels d'abord : les écrans lisent LOC/LOCATIONS/SUPPLIERS
+        // comme des constantes de module, il faut qu'ils soient à jour avant
+        // que le nouvel état ne s'affiche.
+        const next = applyReferentials({
+          site: snapshot.site,
+          locations: snapshot.locations,
+          suppliers: snapshot.suppliers,
+          users: snapshot.users,
+          items: snapshot.items,
+        });
+
+        dispatch({ type: 'HYDRATE_SNAPSHOT', snapshot });
+        stale.current = false;
+        setHydratedAt(new Date().toISOString());
+        setReferentials(next);
+
+        // Contrôle croisé : la vue `stock_levels` est un second témoin, jamais
+        // une source (RULE-002). Un désaccord signale une troncature des
+        // mouvements ou une conversion d'unité qui diverge entre SQL et TS.
+        const byId = new Map(snapshot.items.map((i) => [i.id, i]));
+        const gaps = crossCheckStock(projectStock(snapshot.movements, byId), snapshot.stockLevels);
+        if (gaps.length || snapshot.problems.length) {
+          console.warn('[BUNA] hydratation incomplète', { gaps, problems: snapshot.problems });
+        }
+      })
+      .finally(() => {
+        hydratingRef.current = false;
+        if (!cancelled) setHydrating(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [remoteProfile, online, pending]);
+
+  const refresh = useCallback(() => { stale.current = true; }, []);
 
   /* §55 — déclencheurs : retour de connexion, app au premier plan, timer. */
   useEffect(() => {

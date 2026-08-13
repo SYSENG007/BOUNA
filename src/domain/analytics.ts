@@ -958,6 +958,7 @@ export function supplierAnalytics(
       priceTrendPct:
         acc.first && acc.last ? variationPct(acc.last.price, acc.first.price) : null,
       quantityOrdered: Math.round(acc.quantity * 100) / 100,
+      quantityExpected: acc.orderedKnown,
       quantityReceived: acc.receivedKnown ? measured(Math.round(acc.received * 100) / 100) : NO_DATA,
       fillRatePct:
         acc.receivedKnown && acc.orderedKnown > 0

@@ -1,5 +1,5 @@
 import {
-  createContext, Fragment, useCallback, useContext, useEffect, useMemo, useReducer, useRef,
+  createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef,
   useState, type ReactNode,
 } from 'react';
 import type {
@@ -325,7 +325,6 @@ export function BunaProvider({ children }: { children: ReactNode }) {
    * valeurs-là ne peuvent pas être corrigées par un simple nouveau rendu.
    */
   const [referentials, setReferentials] = useState(signature);
-  const [refreshToken, setRefreshToken] = useState(0);
   /* Vrai tant qu'un instantané serveur reste à charger. */
   const stale = useRef(true);
   const hydratingRef = useRef(false);
@@ -1005,6 +1004,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     },
     authLoading,
     backendConfigured: isBackendConfigured,
+    hydrating,
+    hydratedAt,
+    refresh,
     syncNow, completeSale, voidSale, completeBatch, recordWaste, transferStock,
     recordExpense, receiveGoods, closeCashSession, setNotificationStatus, stockOf,
     saveItem, archiveItem, adjustStock,

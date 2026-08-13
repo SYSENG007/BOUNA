@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
-import type { Role } from '../../domain/types';
+import type { Role, User } from '../../domain/types';
 import {
   IconAlert, IconAnalytics, IconCart, IconCash, IconDay, IconHome, IconMore,
   IconProduction, IconReceive, IconSell, IconStock, IconUser,
@@ -57,27 +57,30 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
  * Merges navigation items across multiple roles, deduplicating by path.
  * The first role's items take priority for ordering. "Moi/Plus" always goes last.
  */
-export function getNavForRoles(roles: Role[]): NavItem[] {
+export function getNavForRoles(user: User): NavItem[] {
+  const roles = user.roles;
   if (roles.length === 0) return NAV_BY_ROLE.SELLER;
-  if (roles.length === 1) return NAV_BY_ROLE[roles[0]];
-
-  const seen = new Set<string>();
-  const merged: NavItem[] = [];
-
-  for (const role of roles) {
-    for (const item of NAV_BY_ROLE[role]) {
-      if (!seen.has(item.to)) {
-        seen.add(item.to);
-        merged.push(item);
+  
+  let merged: NavItem[] = [];
+  if (roles.length === 1) {
+    merged = [...NAV_BY_ROLE[roles[0]]];
+  } else {
+    const seen = new Set<string>();
+    for (const role of roles) {
+      for (const item of NAV_BY_ROLE[role]) {
+        if (!seen.has(item.to)) {
+          seen.add(item.to);
+          merged.push(item);
+        }
       }
     }
   }
 
-  // Always put "Moi / Plus" at the very end
+  // Always put "Moi / Plus" at the very end and rename to user's first name
   const meIdx = merged.findIndex((i) => i.to === '/moi');
-  if (meIdx >= 0 && meIdx !== merged.length - 1) {
+  if (meIdx >= 0) {
     const [me] = merged.splice(meIdx, 1);
-    merged.push(me);
+    merged.push({ ...me, label: user.name.split(' ')[0] });
   }
 
   return merged;

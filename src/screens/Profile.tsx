@@ -52,7 +52,7 @@ export function Profile() {
             <Button onClick={() => navigate('/stock')}>Consulter le stock</Button>
             <Button onClick={() => navigate('/alertes')}>Alertes</Button>
             <Button onClick={() => navigate('/cloture')}>Clôture de caisse</Button>
-            <Button onClick={() => navigate('/catalogue')}>Catalogue (Lecture)</Button>
+            <Button onClick={() => navigate('/achats')}>Liste des courses</Button>
             <Button onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
           </div>
         </Card>
@@ -147,7 +147,7 @@ export function Profile() {
           </Card>
         )}
 
-        <Button full onClick={logout}>Changer de profil</Button>
+        <Button full onClick={logout}>Déconnexion</Button>
       </main>
     </div>
   );

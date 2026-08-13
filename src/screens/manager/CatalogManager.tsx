@@ -5,7 +5,7 @@ import type { Item, ItemKind, Unit } from '../../domain/types';
 import { UNIT_LABEL } from '../../domain/types';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
 import { ScreenHeader } from '../../design-system/components/patterns';
-import { Button, Card, Field } from '../../design-system/components/primitives';
+import { Button, Card, Field, SelectField } from '../../design-system/components/primitives';
 
 export function CatalogManager() {
   const { state, saveItem } = useBuna();
@@ -95,56 +95,40 @@ function EditItem({
 
       <main className="flex-1 space-y-4 p-4">
         <Card className="space-y-4">
-          <Field label="Nom de l'article">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Sirop de Fraise"
-              className="buna-input"
-              autoFocus
-            />
-          </Field>
+          <Field 
+            label="Nom de l'article"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Sirop de Fraise"
+            className="buna-input"
+            autoFocus
+          />
 
-          <Field label="Type">
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as ItemKind)}
-              className="buna-input bg-white"
-            >
-              {ITEM_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <SelectField 
+            label="Type"
+            value={kind}
+            onChange={(v) => setKind(v as ItemKind)}
+            options={ITEM_KINDS.map((k) => ({ value: k, label: k }))}
+          />
           
-          <Field label="Unité de gestion">
-            <select
-              value={unit}
-              onChange={(e) => setUnit(e.target.value as Unit)}
-              className="buna-input bg-white"
-            >
-              {UNITS.map((u) => (
-                <option key={u} value={u}>
-                  {UNIT_LABEL[u]} ({u})
-                </option>
-              ))}
-            </select>
-          </Field>
+          <SelectField 
+            label="Unité de gestion"
+            value={unit}
+            onChange={(v) => setUnit(v as Unit)}
+            options={UNITS.map((u) => ({ value: u, label: `${UNIT_LABEL[u]} (${u})` }))}
+          />
 
           {kind === 'FINISHED' && (
-            <Field label="Prix de vente (FCFA)">
-              <input
-                type="number"
-                value={priceStr}
-                onChange={(e) => setPriceStr(e.target.value)}
-                placeholder="Ex: 2500"
-                className="buna-input"
-                inputMode="numeric"
-              />
-            </Field>
+            <Field 
+              label="Prix de vente (FCFA)"
+              type="number"
+              value={priceStr}
+              onChange={(e) => setPriceStr(e.target.value)}
+              placeholder="Ex: 2500"
+              className="buna-input"
+              inputMode="numeric"
+            />
           )}
         </Card>
       </main>

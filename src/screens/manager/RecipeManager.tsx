@@ -6,7 +6,7 @@ import { RECIPES, RECIPE_VERSIONS } from '../../store/referentials';
 import { UNIT_LABEL } from '../../domain/types';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
 import { ScreenHeader } from '../../design-system/components/patterns';
-import { Button, Card, Field } from '../../design-system/components/primitives';
+import { Button, Card, Field, SelectField } from '../../design-system/components/primitives';
 
 export function RecipeManager() {
   const { state, saveRecipe } = useBuna();
@@ -142,31 +142,25 @@ function EditRecipe({
 
       <main className="flex-1 space-y-4 p-4">
         <Card className="space-y-4">
-          <Field label="Nom de la recette">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Sirop de Fraise (Maison)"
-              className="buna-input"
-              autoFocus
-            />
-          </Field>
+          <Field 
+            label="Nom de la recette"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Sirop de Fraise (Maison)"
+            className="buna-input"
+            autoFocus
+          />
 
-          <Field label="Produit Résultant (Livrable)">
-            <select
-              value={itemId}
-              onChange={(e) => setItemId(e.target.value)}
-              className="buna-input bg-white"
-            >
-              <option value="" disabled>Choisir un produit...</option>
-              {producibleItems.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name} ({UNIT_LABEL[i.unit]})
-                </option>
-              ))}
-            </select>
-          </Field>
+          <SelectField 
+            label="Produit Résultant (Livrable)"
+            value={itemId}
+            onChange={(v) => setItemId(v)}
+            options={[
+              { value: '', label: 'Choisir un produit...' },
+              ...producibleItems.map((i) => ({ value: i.id, label: `${i.name} (${UNIT_LABEL[i.unit]})` }))
+            ]}
+          />
         </Card>
 
         <Card className="space-y-4">
@@ -199,21 +193,19 @@ function EditRecipe({
           <div className="mt-4 pt-4 border-t border-ink-100 space-y-3">
             <div className="text-[13px] font-medium text-ink-700">Ajouter un ingrédient</div>
             
-            <select
+            <SelectField
+              label=""
               value={newIngredientId}
-              onChange={(e) => setNewIngredientId(e.target.value)}
-              className="buna-input bg-white"
-            >
-              <option value="" disabled>Choisir l'ingrédient...</option>
-              {rawItems.filter(i => !ingredients.some(ing => ing.itemId === i.id)).map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setNewIngredientId(v)}
+              options={[
+                { value: '', label: 'Choisir l\'ingrédient...' },
+                ...rawItems.filter(i => !ingredients.some(ing => ing.itemId === i.id)).map((i) => ({ value: i.id, label: i.name }))
+              ]}
+            />
 
             <div className="flex gap-2">
-              <input
+              <Field
+                label=""
                 type="number"
                 value={newIngredientQty}
                 onChange={(e) => setNewIngredientQty(e.target.value)}

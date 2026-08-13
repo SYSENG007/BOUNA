@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useBuna, SUPPLIERS } from '../../store/BunaStore';
+import { LOC } from '../../store/referentials';
+import { UNIT_LABEL } from '../../domain/types';
 import { fcfaFull } from '../../domain/money';
 import {
   EXPENSE_LABEL, PAYMENT_LABEL, type ExpenseCategory, type PaymentMethod,
@@ -28,7 +30,7 @@ const QUICK_AMOUNTS = [2000, 5000, 10000, 20000];
  * le dit explicitement pour éviter la double saisie.
  */
 export function NewExpense() {
-  const { recordExpense } = useBuna();
+  const { state, recordExpense, receiveGoods } = useBuna();
   const navigate = useNavigate();
 
   const [amount, setAmount] = useState('');
@@ -37,19 +39,45 @@ export function NewExpense() {
   const [supplierId, setSupplierId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
 
+  // Fields for MATIERE
+  const [itemId, setItemId] = useState('');
+  const [quantity, setQuantity] = useState('');
+
   const value = Number(amount || 0);
-  const descriptionMissing = description.trim().length === 0;
-  const canSubmit = value > 0 && !descriptionMissing;
+  
+  const isMatiere = category === 'MATIERE';
+  const descriptionMissing = !isMatiere && description.trim().length === 0;
+  const matiereMissing = isMatiere && (!itemId || Number(quantity) <= 0);
+  
+  const canSubmit = value > 0 && !descriptionMissing && !matiereMissing;
+
+  const rawItems = state.items.filter(i => i.kind !== 'FINISHED' && !i.archived);
+  const selectedItem = rawItems.find(i => i.id === itemId);
 
   const submit = () => {
     if (!canSubmit) return;
-    recordExpense({
-      amount: value,
-      category,
-      description: description.trim(),
-      supplierId: supplierId || undefined,
-      paymentMethod,
-    });
+    
+    if (isMatiere) {
+      receiveGoods({
+        supplierId: supplierId || 'unknown',
+        locationId: LOC.KITCHEN, // Default receiving location
+        lines: [{
+          itemId: itemId,
+          quantity: Number(quantity),
+          unitPrice: value / Number(quantity)
+        }],
+        transportCost: 0,
+        paymentMethod
+      });
+    } else {
+      recordExpense({
+        amount: value,
+        category,
+        description: description.trim(),
+        supplierId: supplierId || undefined,
+        paymentMethod,
+      });
+    }
     navigate('/finance', { replace: true });
   };
 
@@ -115,19 +143,36 @@ export function NewExpense() {
           </div>
         </div>
 
-        {category === 'MATIERE' && (
-          <p className="rounded-[4px] bg-info-pale px-3 py-2.5 text-[13px] leading-relaxed text-info-deep">
-            Pour de la marchandise qui entre en stock, passez plutôt par une réception :
-            elle crée la dépense <em>et</em> l'entrée de stock, et met à jour le coût moyen.
-          </p>
+        {isMatiere ? (
+          <Card className="space-y-4">
+            <SelectField
+              label="Article acheté"
+              value={itemId}
+              onChange={setItemId}
+              options={[
+                { value: '', label: 'Choisir un article...' },
+                ...rawItems.map((i) => ({ value: i.id, label: i.name }))
+              ]}
+            />
+            {selectedItem && (
+              <Field
+                label={`Quantité (${UNIT_LABEL[selectedItem.unit]})`}
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+            )}
+          </Card>
+        ) : (
+          <Field
+            label="Description"
+            placeholder="ex. Transport marché → cuisine"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
         )}
-
-        <Field
-          label="Description"
-          placeholder="ex. Transport marché → cuisine"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
 
         <SelectField
           label="Fournisseur"
@@ -170,9 +215,11 @@ export function NewExpense() {
         <Button variant="primary" size="counter" full disabled={!canSubmit} onClick={submit}>
           {value <= 0
             ? 'Saisissez un montant'
-            : descriptionMissing
-              ? 'Décrivez la dépense'
-              : `Enregistrer ${fcfaFull(value)}`}
+            : isMatiere && matiereMissing
+              ? 'Sélectionnez un article et une quantité'
+              : descriptionMissing
+                ? 'Décrivez la dépense'
+                : `Enregistrer ${fcfaFull(value)}`}
         </Button>
       </div>
     </div>

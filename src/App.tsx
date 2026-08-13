@@ -50,7 +50,7 @@ function Shell() {
 
   if (!user) return <Login />;
 
-  const items = getNavForRoles(user.roles);
+  const items = getNavForRoles(user);
   const immersive = FULLSCREEN.includes(pathname);
 
   return (
@@ -62,11 +62,20 @@ function Shell() {
           brand={<BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
           footer={
             <>
-              <div className="border-t border-[#4A362A] pt-4">
-                <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
-                <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
-                  {user.roles.map((r) => ROLE_LABEL[r]).join(' · ').toUpperCase()}
+              <div className="border-t border-[#4A362A] pt-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
+                  <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
+                    {user.roles.map((r) => ROLE_LABEL[r]).join(' · ').toUpperCase()}
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="rounded px-2 py-1 text-[12px] font-medium text-[#B9A895] hover:bg-cafe-soft hover:text-sable-pale transition-colors"
+                >
+                  Déconnexion
+                </button>
               </div>
               <SyncIndicator compact />
             </>
@@ -92,7 +101,7 @@ function Shell() {
 function Home() {
   const { user } = useBuna();
   if (!user) return <Login />;
-  return <Navigate to={getNavForRoles(user.roles)[0].to} replace />;
+  return <Navigate to={getNavForRoles(user)[0].to} replace />;
 }
 
 export default function App() {

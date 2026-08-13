@@ -5,7 +5,7 @@ import type { LocationType, StockLocation } from '../../domain/types';
 import { LOCATIONS } from '../../store/referentials';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
 import { ScreenHeader } from '../../design-system/components/patterns';
-import { Button, Card, Field } from '../../design-system/components/primitives';
+import { Button, Card, Field, SelectField } from '../../design-system/components/primitives';
 
 export function LocationManager() {
   const { saveLocation } = useBuna();
@@ -83,30 +83,22 @@ function EditLocation({
 
       <main className="flex-1 space-y-4 p-4">
         <Card className="space-y-4">
-          <Field label="Nom de l'emplacement">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Frigo Boissons, Réserve arrière..."
-              className="buna-input"
-              autoFocus
-            />
-          </Field>
+          <Field 
+            label="Nom de l'emplacement"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Frigo Boissons, Réserve arrière..."
+            className="buna-input"
+            autoFocus
+          />
 
-          <Field label="Rôle (Type)">
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as LocationType)}
-              className="buna-input bg-white"
-            >
-              {LOCATION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <SelectField 
+            label="Rôle (Type)"
+            value={type}
+            onChange={(v) => setType(v as LocationType)}
+            options={LOCATION_TYPES.map((t) => ({ value: t, label: t }))}
+          />
           
           <p className="text-[12px] text-ink-500">
             Le type définit le comportement du stock dans cet emplacement. CENTRAL est le stock principal, POS est le point de vente, RESERVE est une zone de stockage secondaire.

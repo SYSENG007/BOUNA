@@ -92,9 +92,11 @@ Le PRD décrit sept sprints. Ce dépôt couvre :
 - Owner : cockpit trois questions · Finance : dépenses + journal d'audit
 - Notifications in-app par rôle avec action proposée
 
+**Branché**
+- Supabase : projet provisionné, migrations 0001-0005 appliquées, RLS vérifiée
+  en base, authentification réelle par e-mail et mot de passe
+
 **Reste à brancher**
-- Supabase réel : voir [docs/SUPABASE.md](docs/SUPABASE.md) — client, transport
-  transactionnel et migrations sont prêts ; il manque le projet et les clés
 - PowerSync : remplacer `src/store/persist.ts` et `outbox.ts` par le client PowerSync
 - Web Push et le moteur de règles de notification (Sprint 6)
 - Inventaire complet avec ajustements validés (§24)

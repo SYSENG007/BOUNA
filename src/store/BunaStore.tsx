@@ -12,6 +12,7 @@ import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
 import { pendingEvents, localTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
+import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
 import { supabaseTransport } from '../backend/transport';
 import { evaluateRules, type Cooldowns } from '../domain/rules';
 import { loadState, saveState } from './persist';
@@ -181,6 +182,11 @@ interface Ctx {
   lastSyncAt: string | null;
   login: (userId: UUID) => void;
   logout: () => void;
+  /** Connexion réelle. Disponible seulement quand le backend est configuré. */
+  signIn: (email: string, password: string) => Promise<string | null>;
+  /** Vrai tant que la session n'a pas été restaurée au démarrage. */
+  authLoading: boolean;
+  backendConfigured: boolean;
   syncNow: () => Promise<void>;
   /** Enregistre une vente et tout ce qu'elle implique, en une transaction. */
   completeSale: (
@@ -244,6 +250,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(navigator.onLine);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  /* Profil issu de Supabase. Prend le pas sur les profils de démonstration. */
+  const [remoteProfile, setRemoteProfile] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(isBackendConfigured);
   /* Toute évolution d'état est persistée : l'app doit rouvrir sans réseau (§99). */
   useEffect(() => {
     saveState(state);
@@ -263,9 +272,19 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const itemsMap = useMemo(() => new Map(state.items.map((i) => [i.id, i])), [state.items]);
   const stock = useMemo(() => projectStock(state.movements, itemsMap), [state.movements, itemsMap]);
   const user = useMemo(
-    () => USERS.find((u) => u.id === state.currentUserId) ?? null,
-    [state.currentUserId],
+    () => remoteProfile ?? USERS.find((u) => u.id === state.currentUserId) ?? null,
+    [remoteProfile, state.currentUserId],
   );
+
+  /* Reprise de session au démarrage — fonctionne aussi hors ligne, via le cache. */
+  useEffect(() => {
+    if (!isBackendConfigured) return;
+    let cancelled = false;
+    void restoreSession()
+      .then((profile) => { if (!cancelled) setRemoteProfile(profile); })
+      .finally(() => { if (!cancelled) setAuthLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
   const pending = pendingEvents(state.events).length;
 
   const stockOf = useCallback(
@@ -761,7 +780,18 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     state, user, users: USERS, items: itemsMap, stock, online, pending, syncing, lastSyncAt,
     login: (userId) => dispatch({ type: 'LOGIN', userId }),
-    logout: () => dispatch({ type: 'LOGOUT' }),
+    logout: () => {
+      setRemoteProfile(null);
+      void authSignOut();
+      dispatch({ type: 'LOGOUT' });
+    },
+    signIn: async (email, password) => {
+      const { profile, error } = await authSignIn(email, password);
+      if (profile) setRemoteProfile(profile);
+      return error;
+    },
+    authLoading,
+    backendConfigured: isBackendConfigured,
     syncNow, completeSale, voidSale, completeBatch, recordWaste, transferStock,
     recordExpense, receiveGoods, closeCashSession, setNotificationStatus, stockOf,
     saveItem, archiveItem, adjustStock,

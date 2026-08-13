@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBuna } from '../../store/BunaStore';
 import { fcfa, fcfaFull } from '../../domain/money';
 import { PAYMENT_LABEL } from '../../domain/types';
-import { can } from '../../domain/permissions';
+import { canAny } from '../../domain/permissions';
 import { SyncIndicator } from '../../design-system/components/SyncIndicator';
 import {
   Badge, Button, Card, EmptyState, Field,
@@ -14,7 +14,7 @@ export function Orders() {
   const [voiding, setVoiding] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  const mayVoid = user ? can(user.role, 'VOID_SALE') : false;
+  const mayVoid = user ? canAny(user.roles, 'VOID_SALE') : false;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">

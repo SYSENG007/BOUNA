@@ -68,7 +68,7 @@ export async function loadProfile(): Promise<User | null> {
     organizationId: data.organization_id as string,
     siteId: data.site_id as string,
     name: data.name as string,
-    role: data.role as Role,
+    roles: [data.role as Role],
     status: (data.status as User['status']) ?? 'ACTIVE',
   };
   cacheProfile(profile);

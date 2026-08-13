@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useBuna } from '../../store/BunaStore';
-import { can } from '../../domain/permissions';
+import { canAny } from '../../domain/permissions';
 import { fcfaFull } from '../../domain/money';
 import { formatQty } from '../../domain/units';
 import { UNIT_LABEL, type Item, type ItemKind } from '../../domain/types';
@@ -29,7 +29,7 @@ export function Catalogue() {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Item | 'new' | null>(null);
 
-  const mayEdit = user ? can(user.role, 'MODIFY_PRODUCT_COST') || can(user.role, 'CREATE_PURCHASE') : false;
+  const mayEdit = user ? canAny(user.roles, 'MODIFY_PRODUCT_COST') || canAny(user.roles, 'CREATE_PURCHASE') : false;
 
   const items = useMemo(
     () =>

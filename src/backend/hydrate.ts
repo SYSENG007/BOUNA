@@ -3,6 +3,7 @@ import type {
   Purchase, Role, Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
   WasteEvent,
 } from '../domain/types';
+import { primaryRole } from '../domain/types';
 import { supabase } from './supabase';
 import {
   mapAudit, mapBatch, mapCashSession, mapDomainEvent, mapExpense, mapItem, mapLocation,
@@ -142,7 +143,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
   }
 
   const mappedSales = sales.rows.map(mapSale);
-  const viewerRole: Role = profile.role;
+  const viewerRole: Role = primaryRole(profile);
 
   return {
     organizationId: orgId,

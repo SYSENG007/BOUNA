@@ -21,23 +21,6 @@ export function Pos() {
   const products = state.items.filter((i) => i.kind === 'FINISHED');
   const openedAt = new Date(state.cashSession.openedAt);
 
-  /* Appui long = −1 : pas d'écran intermédiaire pour corriger une erreur. */
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  const startPress = (id: string) => {
-    longPressTimer = setTimeout(() => {
-      remove(id);
-      longPressTimer = null;
-      if ('vibrate' in navigator) navigator.vibrate?.(12);
-    }, 450);
-  };
-  const endPress = (id: string) => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-      add(id);
-    }
-  };
-
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
       <SyncIndicator />
@@ -62,45 +45,58 @@ export function Pos() {
             const available = stockOf(p.id, LOC.POS);
             const out = available <= 0;
             return (
-              <button
+              <div
                 key={p.id}
-                disabled={out}
-                onPointerDown={() => !out && startPress(p.id)}
-                onPointerUp={() => !out && endPress(p.id)}
-                onPointerLeave={() => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } }}
-                onContextMenu={(e) => e.preventDefault()}
+                role="button"
+                tabIndex={out ? -1 : 0}
+                aria-disabled={out}
+                onClick={() => !out && add(p.id)}
                 className={clsx(
-                  'no-select relative flex min-h-[128px] flex-col justify-between rounded-[8px] border p-3 text-left transition-colors',
+                  'no-select relative flex min-h-[128px] flex-col justify-between rounded-[8px] border p-3 text-left transition-all duration-200',
                   out
                     ? 'border-ink-200 bg-ink-100 opacity-60'
                     : qty > 0
-                      ? 'border-brun bg-sable-pale'
-                      : 'border-ink-200 bg-surface active:bg-sable-pale',
+                      ? 'border-brun bg-sable-pale ring-1 ring-brun/30'
+                      : 'border-ink-200 bg-surface active:scale-[0.98] hover:border-ink-300',
                 )}
                 style={{ boxShadow: qty > 0 ? 'var(--shadow-e1)' : undefined }}
               >
-                {qty > 0 && (
-                  <span className="num absolute right-2.5 top-2.5 flex h-8 min-w-8 items-center justify-center rounded-full bg-cafe px-2 text-[15px] text-sable-pale">
-                    {qty}
-                  </span>
-                )}
                 <div className="flex items-start gap-2.5">
                   <ProductImage src={p.imageUrl} name={p.name} size="sm" />
                   <span className="text-[14.5px] font-medium leading-tight text-ink-900">{p.name}</span>
                 </div>
-                <div>
-                  <div className="t-figure text-[19px] text-cafe">{fcfa(p.price ?? 0)}</div>
-                  <div className="text-[11px] text-ink-500">
-                    {out ? 'Rupture' : `${Math.floor(available)} dispo`}
+                
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="t-figure text-[19px] text-cafe">{fcfa(p.price ?? 0)}</div>
+                    <div className="text-[11px] text-ink-500">
+                      {out ? 'Rupture' : `${Math.floor(available)} dispo`}
+                    </div>
                   </div>
+                  
+                  {/* Explicit Stepper when active, replacing the vague long-press UX */}
+                  {qty > 0 && (
+                    <div className="flex items-center gap-2 rounded-full bg-surface shadow-sm border border-brun/20 px-1 py-1" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-100 text-cafe active:bg-ink-200 transition-colors"
+                        onClick={() => remove(p.id)}
+                      >
+                        <span className="text-lg leading-none mb-[2px]">−</span>
+                      </button>
+                      <span className="num min-w-[16px] text-center text-[15px] font-medium text-cafe">{qty}</span>
+                      <button 
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-cafe text-sable-pale active:bg-cafe-soft transition-colors"
+                        onClick={() => add(p.id)}
+                      >
+                        <span className="text-lg leading-none mb-[2px]">+</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
-        <p className="mt-4 px-1 text-center text-[12px] text-ink-400">
-          Un appui = +1 · appui long = −1
-        </p>
       </main>
 
       {/* Panier flottant : le total est toujours visible, l'action toujours à portée de pouce. */}

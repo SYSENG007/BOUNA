@@ -25,9 +25,15 @@ export interface User {
   id: UUID;
   organizationId: UUID;
   name: string;
-  role: Role;
+  /** A user can hold multiple roles (e.g. Baboy is Manager + Preparer + Procurement). */
+  roles: Role[];
   siteId: UUID;
   status: 'ACTIVE' | 'DISABLED';
+}
+
+/** Backward-compatible helper: returns the first (primary) role for display. */
+export function primaryRole(user: User): Role {
+  return user.roles[0] ?? 'SELLER';
 }
 
 /* ------------------------------------------------------- Sites & stocks */

@@ -40,3 +40,13 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 export function can(role: Role, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
 }
+
+/** Check if ANY of a user's roles grants a permission. */
+export function canAny(roles: Role[], permission: Permission): boolean {
+  return roles.some((r) => ROLE_PERMISSIONS[r].includes(permission));
+}
+
+/** Get all unique permissions across multiple roles. */
+export function permissionsForRoles(roles: Role[]): Permission[] {
+  return [...new Set(roles.flatMap((r) => [...ROLE_PERMISSIONS[r]]))];
+}

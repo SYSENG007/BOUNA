@@ -1,10 +1,9 @@
 /**
  * Persistance locale.
  *
- * Le PRD cible SQLite via PowerSync (§69). En attendant que le backend soit
- * provisionné, cette couche joue le même rôle contractuel : la base locale est
- * la source immédiate de lecture/écriture, et rien ne dépend du réseau pour
- * écrire. Le remplacement par PowerSync ne touche que ce fichier et outbox.ts.
+ * La base locale (actuellement localStorage) est la source immédiate de
+ * lecture/écriture, et rien ne dépend du réseau pour écrire.
+ * Si la limite de stockage est atteinte (5Mo), la migration se fera vers IndexedDB.
  */
 
 const KEY = 'buna.state.v1';

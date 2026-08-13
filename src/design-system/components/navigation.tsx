@@ -54,13 +54,43 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 };
 
 /**
+ * Merges navigation items across multiple roles, deduplicating by path.
+ * The first role's items take priority for ordering. "Moi/Plus" always goes last.
+ */
+export function getNavForRoles(roles: Role[]): NavItem[] {
+  if (roles.length === 0) return NAV_BY_ROLE.SELLER;
+  if (roles.length === 1) return NAV_BY_ROLE[roles[0]];
+
+  const seen = new Set<string>();
+  const merged: NavItem[] = [];
+
+  for (const role of roles) {
+    for (const item of NAV_BY_ROLE[role]) {
+      if (!seen.has(item.to)) {
+        seen.add(item.to);
+        merged.push(item);
+      }
+    }
+  }
+
+  // Always put "Moi / Plus" at the very end
+  const meIdx = merged.findIndex((i) => i.to === '/moi');
+  if (meIdx >= 0 && meIdx !== merged.length - 1) {
+    const [me] = merged.splice(meIdx, 1);
+    merged.push(me);
+  }
+
+  return merged;
+}
+
+/**
  * Barre d'onglets terrain.
  * L'onglet actif est signalé par un filet doré court en haut : la couleur seule
  * ne porte jamais un état.
  */
 export function TabBar({ items }: { items: NavItem[] }) {
   return (
-    <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/97 backdrop-blur lg:hidden">
+    <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/97 backdrop-blur">
       <div className="flex">
         {items.map(({ to, label, Icon }) => (
           <NavLink
@@ -107,7 +137,7 @@ export function Sidebar({
 }) {
   return (
     <aside
-      className="sticky top-0 hidden h-screen shrink-0 flex-col gap-8 overflow-y-auto bg-cafe px-5 py-8 text-sable-pale lg:flex"
+      className="sticky top-0 flex h-screen shrink-0 flex-col gap-8 overflow-y-auto bg-cafe px-5 py-8 text-sable-pale"
       style={{ width: 'var(--nav-rail)' }}
     >
       {brand}

@@ -7,6 +7,7 @@ import type {
   ProductionBatch, Purchase, Role, Sale, SaleLine, StockMovement, User, UUID,
   WasteEvent, WasteReason, Unit, EventType,
 } from '../domain/types';
+import { primaryRole } from '../domain/types';
 import { deviceId, uuid, batchCode } from '../domain/ids';
 import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
@@ -447,7 +448,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       id: uuid(),
       userId: user?.id ?? 'unknown',
       userName: user?.name.split(' ')[0] ?? '—',
-      role: (user?.role ?? 'SELLER') as Role,
+      role: user ? primaryRole(user) : 'SELLER' as Role,
       action,
       detail,
       reference,

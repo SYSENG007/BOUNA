@@ -30,7 +30,7 @@ export function Alerts() {
   const [tab, setTab] = useState<Tab>('TODO');
 
   const mine = state.notifications.filter((n) =>
-    user ? n.recipientRoles.includes(user.role) : true,
+    user ? n.recipientRoles.some((r) => user.roles.includes(r)) : true,
   );
 
   const visible = mine.filter((n) => {

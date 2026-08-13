@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { BunaProvider, useBuna } from './store/BunaStore';
 import { CartProvider } from './screens/CartContext';
-import { NAV_BY_ROLE, Sidebar, TabBar } from './design-system/components/navigation';
+import { getNavForRoles, Sidebar, TabBar } from './design-system/components/navigation';
 import { BunaLockup } from './design-system/components/BunaLogo';
 import { SyncIndicator } from './design-system/components/SyncIndicator';
 import { ROLE_LABEL } from './domain/types';
@@ -38,43 +38,48 @@ const FULLSCREEN = [
   '/cloture', '/achats/nouveau', '/achats/reception', '/finance/nouvelle-depense',
 ];
 
+import { useAdaptive } from './design-system/hooks/useAdaptive';
+
 function Shell() {
   const { user } = useBuna();
   const { pathname } = useLocation();
+  const { isMobile } = useAdaptive();
 
   if (!user) return <Login />;
 
-  const items = NAV_BY_ROLE[user.role];
+  const items = getNavForRoles(user.roles);
   const immersive = FULLSCREEN.includes(pathname);
 
   return (
     <div className="flex min-h-dvh bg-shell">
-      {/* Au bureau on travaille assis, avec de la place : le rail remplace la
-          barre d'onglets pour tous les rôles, pas seulement les rôles analystes. */}
-      <Sidebar
-        items={items}
-        brand={<BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
-        footer={
-          <>
-            <div className="border-t border-[#4A362A] pt-4">
-              <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
-              <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
-                {ROLE_LABEL[user.role].toUpperCase()}
+      {/* Sidebar is rendered dynamically for desktop only */}
+      {!isMobile && (
+        <Sidebar
+          items={items}
+          brand={<BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
+          footer={
+            <>
+              <div className="border-t border-[#4A362A] pt-4">
+                <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
+                <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
+                  {user.roles.map((r) => ROLE_LABEL[r]).join(' · ').toUpperCase()}
+                </div>
               </div>
-            </div>
-            <SyncIndicator compact />
-          </>
-        }
-      />
+              <SyncIndicator compact />
+            </>
+          }
+        />
+      )}
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         <div
           className="shell-canvas flex flex-1 flex-col"
-          style={!immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
+          style={isMobile && !immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
         >
           <Outlet />
         </div>
-        {!immersive && <TabBar items={items} />}
+        {/* TabBar is rendered dynamically for mobile only, and hidden in immersive mode */}
+        {isMobile && !immersive && <TabBar items={items} />}
       </div>
     </div>
   );
@@ -84,7 +89,7 @@ function Shell() {
 function Home() {
   const { user } = useBuna();
   if (!user) return <Login />;
-  return <Navigate to={NAV_BY_ROLE[user.role][0].to} replace />;
+  return <Navigate to={getNavForRoles(user.roles)[0].to} replace />;
 }
 
 export default function App() {

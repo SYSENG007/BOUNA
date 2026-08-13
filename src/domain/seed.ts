@@ -27,12 +27,10 @@ export const LOCATIONS: StockLocation[] = [
 ];
 
 export const USERS: User[] = [
-  { id: 'u-aicha', organizationId: ORG_ID, name: 'Aïcha Ndiaye', role: 'SELLER', siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-ibrahim', organizationId: ORG_ID, name: 'Ibrahim Sow', role: 'PREPARER', siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-fatou', organizationId: ORG_ID, name: 'Fatou Ba', role: 'PROCUREMENT', siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-awa', organizationId: ORG_ID, name: 'Awa Diop', role: 'MANAGER', siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-mamadou', organizationId: ORG_ID, name: 'Mamadou Diallo', role: 'OWNER', siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-seydou', organizationId: ORG_ID, name: 'Seydou Fall', role: 'FINANCE', siteId: SITE.id, status: 'ACTIVE' },
+  { id: 'u-baboy', organizationId: ORG_ID, name: 'Baboy', roles: ['MANAGER', 'PREPARER', 'PROCUREMENT'], siteId: SITE.id, status: 'ACTIVE' },
+  { id: 'u-matel', organizationId: ORG_ID, name: 'Matel', roles: ['MANAGER'], siteId: SITE.id, status: 'ACTIVE' },
+  { id: 'u-maty', organizationId: ORG_ID, name: 'Maty', roles: ['FINANCE'], siteId: SITE.id, status: 'ACTIVE' },
+  { id: 'u-ibou', organizationId: ORG_ID, name: 'Ibou', roles: ['SELLER'], siteId: SITE.id, status: 'ACTIVE' },
 ];
 
 export const SUPPLIERS: Supplier[] = [
@@ -133,7 +131,7 @@ export const SEED_MOVEMENTS: StockMovement[] = [
 export const SEED_CASH_SESSION: CashSession = {
   id: 'cs-shift-2',
   siteId: SITE.id,
-  sellerId: 'u-aicha',
+  sellerId: 'u-ibou',
   shiftNumber: 2,
   openingCash: 25000,
   countedCash: null,
@@ -142,11 +140,11 @@ export const SEED_CASH_SESSION: CashSession = {
 };
 
 export const SEED_EXPENSES: Expense[] = [
-  { id: 'ex-1', amount: 22000, category: 'MATIERE', description: 'Achat lait — Laiterie du Terroir', supplierId: 'sup-laiterie', paymentMethod: 'CASH', userId: 'u-fatou', createdAt: iso(11) },
-  { id: 'ex-2', amount: 14000, category: 'EMBALLAGE', description: 'Gobelets 16 oz × 500', supplierId: 'sup-emballage', paymentMethod: 'MOBILE_MONEY', userId: 'u-fatou', createdAt: iso(10) },
-  { id: 'ex-3', amount: 14000, category: 'TRANSPORT', description: 'Transport marché → cuisine', paymentMethod: 'CASH', userId: 'u-fatou', createdAt: iso(8) },
-  { id: 'ex-4', amount: 18000, category: 'ENERGIE', description: 'Recharge électricité', paymentMethod: 'MOBILE_MONEY', userId: 'u-awa', createdAt: iso(5) },
-  { id: 'ex-5', amount: 10000, category: 'MATIERE', description: 'Glace — appoint', paymentMethod: 'CASH', userId: 'u-aicha', createdAt: iso(2) },
+  { id: 'ex-1', amount: 22000, category: 'MATIERE', description: 'Achat lait — Laiterie du Terroir', supplierId: 'sup-laiterie', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(11) },
+  { id: 'ex-2', amount: 14000, category: 'EMBALLAGE', description: 'Gobelets 16 oz × 500', supplierId: 'sup-emballage', paymentMethod: 'MOBILE_MONEY', userId: 'u-baboy', createdAt: iso(10) },
+  { id: 'ex-3', amount: 14000, category: 'TRANSPORT', description: 'Transport marché → cuisine', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(8) },
+  { id: 'ex-4', amount: 18000, category: 'ENERGIE', description: 'Recharge électricité', paymentMethod: 'MOBILE_MONEY', userId: 'u-matel', createdAt: iso(5) },
+  { id: 'ex-5', amount: 10000, category: 'MATIERE', description: 'Glace — appoint', paymentMethod: 'CASH', userId: 'u-ibou', createdAt: iso(2) },
 ];
 
 export const SEED_PURCHASES: Purchase[] = [
@@ -163,10 +161,10 @@ export const SEED_PURCHASES: Purchase[] = [
 ];
 
 export const SEED_AUDIT: AuditEvent[] = [
-  { id: 'au-1', userId: 'u-aicha', userName: 'Aïcha', role: 'SELLER', action: 'Vente #453 — 5 000 FCFA', detail: '2 Vanilla Iced Coffee · Espèces', reference: 'sale:453', createdAt: iso(3) },
-  { id: 'au-2', userId: 'u-awa', userName: 'Awa', role: 'MANAGER', action: 'Annulation vente #453', detail: 'motif : erreur de saisie · validée', reference: 'sale:453', createdAt: iso(2.7) },
-  { id: 'au-3', userId: 'u-ibrahim', userName: 'Ibrahim', role: 'PREPARER', action: 'Batch #B-20260812-04', detail: '27/30 unités · rendement 90 %', reference: 'batch:04', createdAt: iso(2.5) },
-  { id: 'au-4', userId: 'u-ibrahim', userName: 'Ibrahim', role: 'PREPARER', action: 'Transfert vers Coffee Bar Auchan', detail: '18 unités Vanilla · 9 conservées au froid', reference: 'transfer:12', createdAt: iso(2.2) },
+  { id: 'au-1', userId: 'u-ibou', userName: 'Ibou', role: 'SELLER', action: 'Vente #453 — 5 000 FCFA', detail: '2 Vanilla Iced Coffee · Espèces', reference: 'sale:453', createdAt: iso(3) },
+  { id: 'au-2', userId: 'u-matel', userName: 'Matel', role: 'MANAGER', action: 'Annulation vente #453', detail: 'motif : erreur de saisie · validée', reference: 'sale:453', createdAt: iso(2.7) },
+  { id: 'au-3', userId: 'u-baboy', userName: 'Baboy', role: 'PREPARER', action: 'Batch #B-20260812-04', detail: '27/30 unités · rendement 90 %', reference: 'batch:04', createdAt: iso(2.5) },
+  { id: 'au-4', userId: 'u-baboy', userName: 'Baboy', role: 'PREPARER', action: 'Transfert vers Coffee Bar Auchan', detail: '18 unités Vanilla · 9 conservées au froid', reference: 'transfer:12', createdAt: iso(2.2) },
 ];
 
 export const SEED_NOTIFICATIONS: Notification[] = [

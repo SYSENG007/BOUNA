@@ -158,7 +158,7 @@ export function mapProfile(row: Row): User {
     id: str(row.id),
     organizationId: str(row.organization_id),
     name: str(row.name, '—'),
-    role: role(row.role),
+    roles: [role(row.role)],
     siteId: str(row.site_id),
     status: str(row.status) === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
   };

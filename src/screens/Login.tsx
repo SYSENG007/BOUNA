@@ -112,7 +112,7 @@ export function Login() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-medium">{u.name}</span>
                   <span className="num block text-[11px] tracking-[0.1em] text-[#A08E7C]">
-                    {ROLE_LABEL[u.role].toUpperCase()}
+                    {u.roles.map((r) => ROLE_LABEL[r]).join(' · ').toUpperCase()}
                   </span>
                 </span>
                 <span className="text-[18px] text-[#A08E7C]">›</span>

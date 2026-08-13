@@ -238,10 +238,11 @@ export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: R
 /* --------------------------------------------------------- Surfaces */
 
 export function Card({
-  children, className, padded = true,
-}: { children: ReactNode; className?: string; padded?: boolean }) {
+  children, className, padded = true, onClick
+}: { children: ReactNode; className?: string; padded?: boolean; onClick?: () => void }) {
   return (
     <div
+      onClick={onClick}
       className={clsx(
         'rounded-[8px] border border-ink-200 bg-surface',
         padded && 'p-4',

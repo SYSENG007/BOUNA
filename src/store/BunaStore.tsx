@@ -5,7 +5,7 @@ import {
 import type {
   AuditEvent, CashSession, DomainEvent, Expense, Item, Notification, PaymentMethod,
   ProductionBatch, Purchase, Role, Sale, SaleLine, StockMovement, User, UUID,
-  WasteEvent, WasteReason, Unit, EventType,
+  WasteEvent, WasteReason, Unit, EventType, StockLocation, Recipe, RecipeVersion,
 } from '../domain/types';
 import { primaryRole } from '../domain/types';
 import { deviceId, uuid, batchCode } from '../domain/ids';
@@ -260,6 +260,8 @@ interface Ctx {
   recordExpense: (input: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => void;
   /** Crée ou met à jour un article du catalogue. */
   saveItem: (item: Item) => void;
+  saveLocation: (location: StockLocation) => void;
+  saveRecipe: (recipe: Recipe, version: RecipeVersion) => void;
   /** Archive un article : jamais de suppression, l'historique doit rester lisible. */
   archiveItem: (itemId: UUID) => void;
   /**
@@ -669,6 +671,38 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     [itemsMap, makeAudit],
   );
 
+  const saveLocation = useCallback((location: StockLocation) => {
+    const exists = LOCATIONS.some((l) => l.id === location.id);
+    const updated = exists
+      ? LOCATIONS.map((l) => (l.id === location.id ? location : l))
+      : [...LOCATIONS, location];
+    const next = applyReferentials({ site: null, locations: updated, suppliers: [], users: [], items: [] });
+    setReferentials(next);
+  }, []);
+
+  const saveRecipe = useCallback((recipe: Recipe, version: RecipeVersion) => {
+    const rExists = RECIPES.some((r) => r.id === recipe.id);
+    const updatedRecipes = rExists
+      ? RECIPES.map((r) => (r.id === recipe.id ? recipe : r))
+      : [...RECIPES, recipe];
+
+    const vExists = RECIPE_VERSIONS.some((v) => v.id === version.id);
+    const updatedVersions = vExists
+      ? RECIPE_VERSIONS.map((v) => (v.id === version.id ? version : v))
+      : [...RECIPE_VERSIONS, version];
+
+    const next = applyReferentials({
+      site: null,
+      locations: [],
+      suppliers: [],
+      users: [],
+      items: [],
+      recipes: updatedRecipes,
+      recipeVersions: updatedVersions,
+    });
+    setReferentials(next);
+  }, []);
+
   const archiveItem = useCallback<Ctx['archiveItem']>(
     (itemId) => {
       const item = itemsMap.get(itemId);
@@ -1010,7 +1044,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     refresh,
     syncNow, completeSale, voidSale, completeBatch, recordWaste, transferStock,
     recordExpense, receiveGoods, closeCashSession, setNotificationStatus, stockOf,
-    saveItem, archiveItem, adjustStock,
+    saveItem, archiveItem, adjustStock, saveLocation, saveRecipe,
   };
 
   return <BunaContext.Provider value={value}>{children}</BunaContext.Provider>;

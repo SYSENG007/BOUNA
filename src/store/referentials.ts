@@ -108,6 +108,8 @@ export interface ReferentialInput {
   suppliers: Supplier[];
   users: User[];
   items: { id: string; name: string }[];
+  recipes?: Recipe[];
+  recipeVersions?: RecipeVersion[];
 }
 
 const CACHE_KEY = 'buna.referentials.v1';
@@ -191,6 +193,14 @@ export function applyReferentials(input: ReferentialInput): string {
   if (input.suppliers.length) {
     for (const [from, to] of aliasByName(SEED_SUPPLIERS, input.suppliers)) aliases.set(from, to);
     replace(SUPPLIERS, input.suppliers);
+  }
+
+  if (input.recipes?.length) {
+    replace(RECIPES, input.recipes);
+  }
+
+  if (input.recipeVersions?.length) {
+    replace(RECIPE_VERSIONS, input.recipeVersions);
   }
 
   if (input.users.length) {

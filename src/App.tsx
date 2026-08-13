@@ -24,6 +24,9 @@ import { Purchase } from './screens/procurement/Purchase';
 import { GoodsReceipt } from './screens/procurement/GoodsReceipt';
 import { Finance } from './screens/finance/Finance';
 import { NewExpense } from './screens/finance/NewExpense';
+import { LocationManager } from './screens/manager/LocationManager';
+import { CatalogManager } from './screens/manager/CatalogManager';
+import { RecipeManager } from './screens/manager/RecipeManager';
 import { Transfer } from './screens/shared/Transfer';
 import { Alerts } from './screens/Alerts';
 import { Catalogue } from './screens/catalogue/Catalogue';
@@ -129,6 +132,10 @@ export default function App() {
               <Route path="/achats" element={<Replenishment />} />
               <Route path="/achats/nouveau" element={<Purchase />} />
               <Route path="/achats/reception" element={<GoodsReceipt />} />
+
+              <Route path="/manager/emplacements" element={<LocationManager />} />
+              <Route path="/manager/catalogue" element={<CatalogManager />} />
+              <Route path="/manager/recettes" element={<RecipeManager />} />
 
               <Route path="/moi" element={<Profile />} />
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -52,10 +52,22 @@ export function Profile() {
             <Button onClick={() => navigate('/stock')}>Consulter le stock</Button>
             <Button onClick={() => navigate('/alertes')}>Alertes</Button>
             <Button onClick={() => navigate('/cloture')}>Clôture de caisse</Button>
-            <Button onClick={() => navigate('/catalogue')}>Catalogue</Button>
+            <Button onClick={() => navigate('/catalogue')}>Catalogue (Lecture)</Button>
             <Button onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
           </div>
         </Card>
+
+        {/* Management (Manager / Owner) */}
+        {(user.roles.includes('MANAGER') || user.roles.includes('OWNER')) && (
+          <Card className="space-y-3">
+            <SectionLabel>Administration</SectionLabel>
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="secondary" onClick={() => navigate('/manager/catalogue')}>Catalogue Produits</Button>
+              <Button variant="secondary" onClick={() => navigate('/manager/recettes')}>Gérer les Recettes</Button>
+              <Button variant="secondary" onClick={() => navigate('/manager/emplacements')}>Lieux de Stockage</Button>
+            </div>
+          </Card>
+        )}
 
         {/* Sync Status — simple */}
         <Card className="space-y-3">

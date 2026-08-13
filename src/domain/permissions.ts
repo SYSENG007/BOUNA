@@ -22,10 +22,15 @@ const FINANCE: Permission[] = [
   'RECORD_EXPENSE', 'VIEW_SUPPLIERS', 'VIEW_FULL_COMPANY_PROFIT', 'VIEW_AUDIT_LOG', 'VIEW_POS_STOCK',
 ];
 
-const MANAGER: Permission[] = [
+/*
+ * Le manager hérite des trois métiers de terrain. Les trois partagent des
+ * droits — VIEW_POS_STOCK revient trois fois, RECORD_WASTE deux — donc on
+ * compose puis on dédoublonne : un droit accordé deux fois reste un droit.
+ */
+const MANAGER: Permission[] = [...new Set<Permission>([
   ...SELLER, ...PREPARER, ...PROCUREMENT,
-  'VOID_SALE', 'APPROVE_PURCHASE', 'CLOSE_DAY', 'VIEW_AUDIT_LOG', 'COUNT_INVENTORY',
-];
+  'VOID_SALE', 'APPROVE_PURCHASE', 'CLOSE_DAY', 'VIEW_AUDIT_LOG',
+])];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   SELLER, PREPARER, PROCUREMENT, FINANCE, MANAGER,

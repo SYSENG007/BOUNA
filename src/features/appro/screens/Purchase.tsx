@@ -89,15 +89,15 @@ export function Purchase() {
                       options={purchasable.map((it) => ({ value: it.id, label: `${it.name} (${UNIT_LABEL[it.unit]})` }))}
                     />
                   </div>
-                  {lines.length > 1 && (
-                    <button
-                      onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}
-                      aria-label="Retirer la ligne"
-                      className="mt-7 h-11 w-11 shrink-0 text-[18px] text-ink-400"
-                    >
-                      ×
-                    </button>
-                  )}
+                  {/* Retirable même seule : on se trompait d'article et il
+                      fallait vivre avec, faute de pouvoir supprimer la ligne. */}
+                  <button
+                    onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}
+                    aria-label={`Retirer ${item.name} de la commande`}
+                    className="mt-7 h-11 w-11 shrink-0 rounded-[6px] text-[18px] text-ink-400 transition-colors hover:bg-critique-pale hover:text-critique"
+                  >
+                    ×
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -139,6 +139,11 @@ export function Purchase() {
             );
           })}
 
+          {lines.length === 0 && (
+            <p className="px-1 text-[13px] text-ink-500">
+              Aucun article. Ajoutez ce que vous achetez, ligne par ligne.
+            </p>
+          )}
           <Button full onClick={addLine}>+ Ajouter un article</Button>
         </div>
 

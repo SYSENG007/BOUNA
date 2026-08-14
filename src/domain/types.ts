@@ -49,6 +49,14 @@ export interface StockLocation { id: UUID; siteId: UUID; name: string; type: Loc
 /* ------------------------------------------------------------ Catalogue */
 
 export type ItemKind = 'RAW_MATERIAL' | 'PACKAGING' | 'INTERMEDIATE' | 'FINISHED';
+
+/** L'écran ne montre jamais l'enum : « RAW_MATERIAL » ne veut rien dire au comptoir. */
+export const ITEM_KIND_LABEL: Record<ItemKind, string> = {
+  RAW_MATERIAL: 'Ingrédient',
+  PACKAGING: 'Emballage',
+  INTERMEDIATE: 'Préparation',
+  FINISHED: 'Produit fini',
+};
 export type Unit = 'kg' | 'g' | 'L' | 'mL' | 'unite' | 'sachet' | 'bouteille' | 'paquet' | 'carton';
 
 /** Facteurs vers l'unité de base de la famille (g, mL, unité). */

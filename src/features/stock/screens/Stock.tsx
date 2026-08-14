@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useBuna, LOCATIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
-import { stockHealth } from '../../../domain/stock';
+import { replenishmentNeed, stockHealth } from '../../../domain/stock';
 import type { ItemKind } from '../../../domain/types';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { StockRow } from '../../../design-system/components/patterns';
@@ -25,7 +25,7 @@ const FILTERS: { value: Filter; label: string }[] = [
  * sur l'écran, pas dans un rapport. »
  */
 export function Stock() {
-  const { state, stockOf } = useBuna();
+  const { state, stockOf, can } = useBuna();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [query, setQuery] = useState('');
@@ -65,6 +65,33 @@ export function Stock() {
     return { theoretical, actual, delta: actual - theoretical, soldUnits };
   }, [state.sales, state.movements]);
 
+  /*
+   * Le pont vers l'approvisionnement.
+   *
+   * Constater un manque et le commander étaient deux features séparées : on
+   * voyait « Lait entier — critique » puis on partait le retrouver de tête dans
+   * un autre écran. Ce qui manque part directement en commande, avec la
+   * quantité qui manque et le dernier prix connu.
+   */
+  const missing = useMemo(
+    () =>
+      rows
+        .map(({ item, total }) => ({ item, need: replenishmentNeed(total, item) }))
+        .filter((r) => r.need > 0),
+    [rows],
+  );
+
+  const buyMissing = () =>
+    navigate('/appro/commande', {
+      state: {
+        lines: missing.map(({ item, need }) => ({
+          itemId: item.id,
+          quantity: Math.ceil(need),
+          unitPrice: Math.round(item.weightedAvgCost ?? 0),
+        })),
+      },
+    });
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
       <SyncIndicator />
@@ -80,6 +107,11 @@ export function Stock() {
           <Button size="compact" className="flex-1" onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
           <Button size="compact" className="flex-1" onClick={() => navigate('/stock/perte')}>Perte</Button>
         </div>
+        {missing.length > 0 && can('PLACE_ORDER') && (
+          <Button variant="primary" size="compact" full onClick={buyMissing}>
+            Commander ce qui manque — {missing.length} article{missing.length > 1 ? 's' : ''}
+          </Button>
+        )}
         <Field label="" placeholder="Rechercher un article" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="-mx-4 overflow-x-auto px-4">
           <Segmented value={filter} onChange={setFilter} options={FILTERS} />

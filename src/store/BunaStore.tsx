@@ -16,7 +16,7 @@ import { makeActor } from '../domain/actor';
 import type { Resolution, Variance } from '../domain/variance';
 import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL, resolve as resolveVarianceFact } from '../domain/variance';
 import { convert } from '../domain/units';
-import { projectStock, weightedAverageCost } from '../domain/stock';
+import { projectStock, sourceLocation, weightedAverageCost } from '../domain/stock';
 import { dueEvents, pendingEvents, selectTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
 import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
@@ -466,6 +466,19 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     [stock],
   );
 
+  /*
+   * L'ordre de service. Le comptoir d'abord — c'est là qu'on vend — puis le
+   * frigo, la cuisine, le stock principal.
+   */
+  const SERVE_ORDER = useMemo(() => [LOC.POS, LOC.FRIDGE, LOC.KITCHEN, LOC.CENTRAL], []);
+
+  /** Où prendre `quantity` de `itemId`, en préférant `preferred` s'il suffit. */
+  const sourceFor = useCallback(
+    (itemId: UUID, quantity: number, preferred?: UUID) =>
+      sourceLocation((loc) => stockOf(itemId, loc), SERVE_ORDER, quantity, preferred),
+    [stockOf, SERVE_ORDER],
+  );
+
   /* ------------------------------------------------------- Fabriques */
 
   /**
@@ -594,8 +607,14 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         type: 'COMMIT',
         sale,
         bumpSale: true,
+        /* On ne déduit plus d'un LOC.POS supposé : la production livre au
+           frigo, et le comptoir plongeait en négatif pendant que la
+           marchandise attendait à côté. */
         movements: lines.map((l) =>
-          makeMovement(l.itemId, LOC.POS, -l.quantity, 'unite', 'SALE', 'Sale', saleId, actor),
+          makeMovement(
+            l.itemId, sourceFor(l.itemId, l.quantity, LOC.POS), -l.quantity,
+            'unite', 'SALE', 'Sale', saleId, actor,
+          ),
         ),
         events: [
           /*
@@ -628,7 +647,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
       return sale;
     },
-    [user, siteId, state.saleCounter, state.cashSession.id, authorize, makeEvent, makeMovement, makeAudit],
+    [user, siteId, state.saleCounter, state.cashSession.id, authorize, makeEvent, makeMovement, makeAudit, sourceFor],
   );
 
   const voidSale = useCallback<Ctx['voidSale']>(
@@ -666,7 +685,11 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       // le système sait ce que ça a coûté en lait, café, gobelets.
       const consumption = version.ingredients.map((ing) =>
         makeMovement(
-          ing.itemId, LOC.KITCHEN, -(ing.quantity * produced), ing.unit,
+          /* La cuisine était codée en dur. Le lait est au frigo : la cuisine
+             passait en négatif et le frigo restait plein. */
+          ing.itemId,
+          sourceFor(ing.itemId, ing.quantity * produced, LOC.KITCHEN),
+          -(ing.quantity * produced), ing.unit,
           'PRODUCTION_CONSUMPTION', 'ProductionBatch', id, actor,
         ),
       );
@@ -713,7 +736,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           : undefined,
       });
     },
-    [user, state.batchCounter, itemsMap, authorize, makeEvent, makeMovement, makeAudit],
+    [user, state.batchCounter, itemsMap, authorize, makeEvent, makeMovement, makeAudit, sourceFor],
   );
 
   const recordWaste = useCallback<Ctx['recordWaste']>(

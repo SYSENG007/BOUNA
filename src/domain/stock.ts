@@ -91,3 +91,35 @@ export function replenishmentNeed(quantity: number, item: Item): number {
 /* ------------------------------------------------- Théorique vs réel §66 */
 
 
+
+/**
+ * D'où sort réellement la marchandise.
+ *
+ * La vente déduisait toujours du comptoir et la production livrait au frigo :
+ * produire ne rendait donc jamais un produit vendable, et vendre creusait un
+ * emplacement vide pendant que la marchandise dormait deux mètres plus loin.
+ * Le stock est une projection : on déduit de l'emplacement qui le détient, pas
+ * de celui qu'on avait supposé.
+ *
+ * On préfère l'emplacement demandé s'il couvre le besoin — le comptoir sert au
+ * comptoir. Sinon le premier qui couvre, dans l'ordre donné. Et si aucun ne
+ * couvre, celui qui en a le plus : mieux vaut un écart sur l'emplacement où la
+ * marchandise se trouvait vraiment qu'un négatif propre sur un emplacement vide.
+ */
+export function sourceLocation(
+  availableAt: (locationId: UUID) => number,
+  locations: readonly UUID[],
+  quantity: number,
+  preferred?: UUID,
+): UUID {
+  if (locations.length === 0) return preferred ?? '';
+  if (preferred && availableAt(preferred) >= quantity) return preferred;
+
+  const covering = locations.find((id) => availableAt(id) >= quantity);
+  if (covering) return covering;
+
+  return locations.reduce(
+    (best, id) => (availableAt(id) > availableAt(best) ? id : best),
+    preferred && locations.includes(preferred) ? preferred : locations[0],
+  );
+}

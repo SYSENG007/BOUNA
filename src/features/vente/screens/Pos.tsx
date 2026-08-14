@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { useBuna, LOC } from '../../../store/BunaStore';
+import { useBuna } from '../../../store/BunaStore';
 import { useCart } from '../CartContext';
 import { fcfa, fcfaFull } from '../../../domain/money';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
@@ -42,7 +42,10 @@ export function Pos() {
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => {
             const qty = cart[p.id] ?? 0;
-            const available = stockOf(p.id, LOC.POS);
+            /* Le stock vendable, c'est tout ce qui est sur le site — pas seulement ce
+               qui a été rangé au comptoir. Lire LOC.POS seul affichait « rupture »
+               sur un produit dont il restait vingt unités au frigo. */
+            const available = stockOf(p.id);
             const out = available <= 0;
             return (
               <div

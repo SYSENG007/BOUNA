@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useBuna, LOC, RECIPE_VERSIONS } from '../../../store/BunaStore';
+import { useBuna, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
 import { convert } from '../../../domain/units';
 import { stockHealth } from '../../../domain/stock';
@@ -56,7 +56,9 @@ export function Production() {
 
       <main className="flex-1 space-y-3 px-4 pb-28">
         {finished.map((product) => {
-          const available = stockOf(product.id, LOC.POS);
+          /* Même lecture que le comptoir : sinon l'écran réclame indéfiniment une
+             production qui a déjà eu lieu, rangée ailleurs. */
+          const available = stockOf(product.id);
           const target = product.targetStock ?? 0;
           const toProduce = Math.max(0, Math.ceil(target - available));
           const recipe = RECIPE_VERSIONS.find(

@@ -1,0 +1,10 @@
+# Le service worker ne doit jamais être servi depuis un cache : c'est lui qui
+# décide quand l'application se met à jour. Le mettre en cache fige les
+# terrains sur une version périmée sans aucun moyen de les rattraper.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Les bundles portent un hash dans leur nom : un contenu donné ne change jamais
+# d'URL, donc un an de cache immuable est sûr.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

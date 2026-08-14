@@ -571,11 +571,65 @@ fonctions serveur existent et sont gardées (`approve_purchase_request`,
 `reject_purchase_request`) ; les capacités correspondantes s'accordent depuis
 Équipe et n'apparaissent pas dans le tiroir, faute de destination.
 
-**Les migrations 0009 et 0010 n'ont pas été exécutées.** Ni PostgreSQL local, ni
-Docker, ni CLI Supabase sur cette machine. Elles ont été vérifiées
-structurellement — parité de l'enum des capacités entre SQL et TypeScript,
-politiques toutes précédées de leur `drop`, dollar-quoting équilibré, aucune
-référence à une table inexistante — mais **jamais appliquées à une base**.
-Tant qu'elles ne le sont pas, le client demande `profiles.post` et
+**Les migrations 0009 et 0010 n'ont encore tourné sur aucune base.** Elles ont
+été vérifiées structurellement — parité de l'enum des capacités entre SQL et
+TypeScript, politiques toutes précédées de leur `drop`, dollar-quoting
+équilibré, aucune référence à une table inexistante — mais vérifié n'est pas
+appliqué. Tant qu'elles ne le sont pas, le client demande `profiles.post` et
 `user_capabilities` à un schéma qui ne les a pas : l'authentification réelle
 échouera. Le mode terrain (`npm run dev:terrain`) reste utilisable.
+
+---
+
+## 13. Le socle d'exécution — arrêté le 14 août 2026
+
+| Couche | Choix | Pourquoi |
+| --- | --- | --- |
+| Base et logique serveur | Supabase, plan gratuit | Les règles métier de BUNA *sont* du SQL — RLS, fonctions transactionnelles, index partiels. Incluses, pas facturées à part. |
+| Authentification | Supabase Auth | Compris dans le gratuit, largement dimensionné pour l'effectif. |
+| Front | React 19 + Vite + Tailwind v4, PWA | Inchangé. |
+| Hébergement | Cloudflare Pages | Bande passante illimitée et **usage commercial autorisé** — ce que le plan Hobby de Vercel interdit. |
+| Outillage local | `postgresql@17` via Homebrew | Uniquement pour `psql` et `pg_dump`. |
+| Conteneurs | Aucun | Abandonné. |
+| Hors ligne | L'outbox maison | Elle fonctionne. PowerSync et Electric n'apporteraient rien dans les limites du gratuit. |
+| Notifications | Web Push + VAPID | Aucun tiers, réellement gratuit, clé déjà générée. |
+| Sauvegardes | `pg_dump` manuel | Le plan gratuit n'en fait aucune. Personne ne les déclenchera à votre place. |
+
+Coût total : 0 €.
+
+### 13.1 Pas de réplique locale
+
+Reproduire Supabase en local — conteneur, harnais `auth` écrit à la main,
+cluster jetable — coûtait plus cher que ce que ça vérifiait. Un harnais fait
+maison ne prouve pas le comportement de la vraie base : il prouve le
+comportement de ma copie.
+
+Les migrations s'appliquent donc directement sur le projet distant, précédées
+d'un `pg_dump`. **Le DDL est transactionnel en PostgreSQL** : si 0009 casse à la
+ligne 900, tout est annulé et la base reste dans l'état d'avant. Le filet, c'est
+Postgres lui-même.
+
+### 13.2 La séquence
+
+```
+scripts/db-backup.sh                              # refuse une sauvegarde vide
+scripts/db-apply.sh supabase/migrations/0009_capabilities.sql
+scripts/db-apply.sh supabase/migrations/0010_actor_trace.sql
+psql "$SUPABASE_DB_URL" -f supabase/verify_invariants.sql
+```
+
+`db-apply.sh` refuse de tourner sans sauvegarde de moins de 24 h : le rollback
+transactionnel protège d'un échec, pas d'une migration qui réussit en faisant la
+mauvaise chose.
+
+`verify_invariants.sql` rend un verdict OK / ÉCHEC par invariant : helpers de
+politique qui **gardent** leur `execute`, fonctions d'écriture qui le **perdent**
+pour `PUBLIC`, vues `security_invoker`, RLS sur toute table, les 25 capacités,
+l'index partiel qui autorise l'historique des accords, les colonnes `actor` sur
+les sept tables tracées, et la politique qui rend une résolution d'écart
+définitive.
+
+Deux choses qu'aucune requête ne prouve et qu'il faut exercer avec deux comptes
+réels : qu'un compte **sans** `RECEIVE_GOODS` se fait bien refuser
+`receive_goods`, et qu'appeler `complete_sale` deux fois avec le même `event.id`
+ne crée qu'une seule vente.

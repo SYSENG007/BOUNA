@@ -686,9 +686,16 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       const consumption = version.ingredients.map((ing) =>
         makeMovement(
           /* La cuisine était codée en dur. Le lait est au frigo : la cuisine
-             passait en négatif et le frigo restait plein. */
+             passait en négatif et le frigo restait plein.
+             La quantité est convertie dans l'unité de l'ARTICLE avant d'être
+             comparée au stock — 3960 mL face à 6,2 L, comparés bruts, ne
+             désignent jamais le bon emplacement. */
           ing.itemId,
-          sourceFor(ing.itemId, ing.quantity * produced, LOC.KITCHEN),
+          sourceFor(
+            ing.itemId,
+            convert(ing.quantity * produced, ing.unit, itemsMap.get(ing.itemId)?.unit ?? ing.unit),
+            LOC.KITCHEN,
+          ),
           -(ing.quantity * produced), ing.unit,
           'PRODUCTION_CONSUMPTION', 'ProductionBatch', id, actor,
         ),

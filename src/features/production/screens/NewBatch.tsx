@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import { feasibleUnits, shortfallFor } from '../../../domain/production';
 import { useBuna, LOC, LOCATIONS, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
 import { fcfaFull } from '../../../domain/money';
@@ -17,7 +18,7 @@ const LOSS_PRESETS = [0, 3];
  * consommation d'ingrédients, le rendement et le coût. Il ne calcule jamais.
  */
 export function NewBatch() {
-  const { items, completeBatch } = useBuna();
+  const { items, completeBatch, stockOf } = useBuna();
   const navigate = useNavigate();
   const routed = (useLocation().state ?? {}) as
     { itemId?: string; planned?: number; recipeVersionId?: string };
@@ -31,6 +32,13 @@ export function NewBatch() {
   const version = RECIPE_VERSIONS.find((v) => v.id === recipeVersionId)!;
   const productId = version.recipeId === 'rc-vanilla' ? 'it-vanilla' : 'it-caramel';
   const product = items.get(productId)!;
+
+  /* Ce que les matières permettent réellement. L'écran laissait déclarer
+     vingt-deux unités avec de quoi en faire zéro : le stock partait en négatif
+     sans que rien ne le signale, et « Rupture » s'affichait sur un article
+     qu'on venait de consommer deux fois. */
+  const feasible = feasibleUnits(version.ingredients, (id) => items.get(id), (id) => stockOf(id));
+  const shortfall = shortfallFor(version.ingredients, (id) => items.get(id), (id) => stockOf(id), produced);
 
   const yieldPct = planned > 0 ? Math.round((produced / planned) * 100) : 100;
   const unitCost = version.ingredients.reduce((sum, ing) => {
@@ -145,6 +153,39 @@ export function NewBatch() {
           {product.name} · recette v{version.version} figée. Le batch conservera cette version même si la
           recette évolue demain.
         </p>
+
+        {/* On ne bloque pas : le préparateur a réellement fabriqué ce qu'il
+            déclare, et lui refuser sa saisie éloignerait l'application du
+            terrain. Mais il doit voir la conséquence avant de valider — sinon
+            le stock devient une fiction que personne ne rattrape. */}
+        {shortfall.length > 0 ? (
+          <Card className="space-y-2 border border-surveiller bg-surveiller-pale">
+            <div className="text-[14px] font-medium text-or-ink">
+              Les matières ne suffisent pas pour {produced} unité{produced > 1 ? 's' : ''}
+            </div>
+            <ul className="space-y-1">
+              {shortfall.map((m) => (
+                <li key={m.itemId} className="num text-[13px] text-or-ink">
+                  {m.name} — il manque {formatQty(m.missing, m.unit)}
+                </li>
+              ))}
+            </ul>
+            <p className="text-[12px] leading-relaxed text-or-ink">
+              {feasible.unknown
+                ? "Recette incomplète : impossible de dire combien d'unités sont possibles."
+                : `Les matières en stock permettent ${feasible.units} unité${feasible.units > 1 ? 's' : ''}.`}{' '}
+              Vous pouvez enregistrer quand même — le stock passera en négatif et
+              l'écart devra être expliqué.
+            </p>
+          </Card>
+        ) : (
+          !feasible.unknown && (
+            <p className="derived px-1 text-[12px] text-ink-500">
+              Matières suffisantes — {feasible.units} unité{feasible.units > 1 ? 's' : ''} possibles
+              {feasible.limitingName !== '—' && `, ${feasible.limitingName} limite`}.
+            </p>
+          )
+        )}
       </main>
 
       <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">

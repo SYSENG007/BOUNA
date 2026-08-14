@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useBuna, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
-import { convert } from '../../../domain/units';
+import { feasibleUnits as feasible } from '../../../domain/production';
 import { stockHealth } from '../../../domain/stock';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { ActionRow, HEALTH_TONE } from '../../../design-system/components/patterns';
@@ -17,24 +17,11 @@ export function Production() {
 
   const finished = state.items.filter((i) => i.kind === 'FINISHED' && i.targetStock);
 
-  /**
-   * Combien d'unités le stock de matières permet-il encore de produire ?
-   * On prend le maillon le plus faible de la recette — c'est lui qui casse le service.
-   */
-  const feasibleUnits = (recipeVersionId: string): { units: number; limitingName: string } => {
+  /* Même calcul que l'écran de déclaration : une seule source de vérité. */
+  const feasibleUnits = (recipeVersionId: string) => {
     const version = RECIPE_VERSIONS.find((v) => v.id === recipeVersionId);
-    if (!version) return { units: 0, limitingName: '—' };
-    let min = Infinity;
-    let limitingName = '—';
-    for (const ing of version.ingredients) {
-      const item = items.get(ing.itemId);
-      if (!item) continue;
-      const available = stockOf(ing.itemId);
-      const perUnit = convert(ing.quantity, ing.unit, item.unit);
-      const possible = perUnit > 0 ? available / perUnit : Infinity;
-      if (possible < min) { min = possible; limitingName = item.name; }
-    }
-    return { units: Math.max(0, Math.floor(min)), limitingName };
+    if (!version) return { units: 0, limitingName: '—', unknown: true };
+    return feasible(version.ingredients, (id) => items.get(id), (id) => stockOf(id));
   };
 
   const criticalItems = state.items

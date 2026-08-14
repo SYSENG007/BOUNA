@@ -78,7 +78,7 @@ export const initialState: State = {
   variances: [],
 };
 
-type Action =
+export type Action =
   | { type: 'LOGIN'; userId: UUID }
   | { type: 'LOGOUT' }
   | { type: 'HYDRATE'; state: State }

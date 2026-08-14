@@ -12,22 +12,25 @@ describe('Interopérabilité (Cross-operability)', () => {
     const cashId = uuid();
     let action: Action = {
       type: 'COMMIT',
-      cashSession: { id: cashId, locationId: 'loc-1', openedAt: actor.at, openedBy: actor.userId, initialAmount: 50000, expectedAmount: 50000, countedAmount: 0, status: 'OPEN', events: [] }
+      cashSession: { 
+        id: cashId, siteId: 'loc-1', sellerId: actor.userId, shiftNumber: 1, openingCash: 50000, countedCash: null, openedAt: actor.at, closedAt: null 
+      }
     };
     state = reducer(state, action);
-    expect(state.cashSession.initialAmount).toBe(50000);
+    expect(state.cashSession.openingCash).toBe(50000);
 
     // 2. Achat (Sortie d'argent -> Entrée en stock)
     const purchaseId = uuid();
     const expenseId = uuid();
+    const mockActor: any = { userId: actor.userId, at: actor.at, userName: 'Test', post: 'OWNER' };
     action = {
       type: 'COMMIT',
       movements: [
-        { id: uuid(), itemId: '55555555-0000-0000-0000-000000000001', locationId: 'loc-1', quantity: 10, unit: 'L', movementType: 'PURCHASE_RECEIPT', referenceId: purchaseId, createdAt: actor.at, actor: { userId: actor.userId, capability: 'RECEIVE_GOODS', at: actor.at } }
-      ],
+        { id: uuid(), itemId: '55555555-0000-0000-0000-000000000001', locationId: 'loc-1', quantity: 10, unit: 'L', movementType: 'PURCHASE_RECEIPT', referenceId: purchaseId, createdAt: actor.at, actor: mockActor }
+      ] as any,
       expense: {
-        id: expenseId, amount: 10000, category: 'MATIERE', description: 'Achat lait', supplierId: 'sup-1', paymentMethod: 'CASH', userId: actor.userId, createdAt: actor.at, actor: { userId: actor.userId, capability: 'RECORD_EXPENSE', at: actor.at }
-      }
+        id: expenseId, amount: 10000, category: 'MATIERE', description: 'Achat lait', supplierId: 'sup-1', paymentMethod: 'CASH', userId: actor.userId, createdAt: actor.at, actor: mockActor
+      } as any
     };
     state = reducer(state, action);
     
@@ -40,11 +43,11 @@ describe('Interopérabilité (Cross-operability)', () => {
     action = {
       type: 'COMMIT',
       movements: [
-        { id: uuid(), itemId: '55555555-0000-0000-0000-000000000001', locationId: 'loc-1', quantity: -2, unit: 'L', movementType: 'SALE_DELIVERY', referenceId: saleId, createdAt: actor.at, actor: { userId: actor.userId, capability: 'SELL', at: actor.at } }
-      ],
+        { id: uuid(), itemId: '55555555-0000-0000-0000-000000000001', locationId: 'loc-1', quantity: -2, unit: 'L', movementType: 'SALE', referenceId: saleId, createdAt: actor.at, actor: mockActor }
+      ] as any,
       sale: {
-        id: saleId, locationId: 'loc-1', lines: [{ itemId: '55555555-0000-0000-0000-000000000001', quantity: 2, unitPrice: 2500, price: 5000 }], total: 5000, paymentMethod: 'CASH', status: 'COMPLETED', createdAt: actor.at, userId: actor.userId, actor: { userId: actor.userId, capability: 'SELL', at: actor.at }
-      }
+        id: saleId, locationId: 'loc-1', lines: [{ itemId: '55555555-0000-0000-0000-000000000001', quantity: 2, unitPrice: 2500, name: 'Lait', unitCost: 1000 }], total: 5000, paymentMethod: 'CASH', status: 'COMPLETED', createdAt: actor.at, actor: mockActor
+      } as any
     };
     state = reducer(state, action);
 

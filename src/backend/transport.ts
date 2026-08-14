@@ -21,7 +21,23 @@ const RPC_BY_EVENT: Partial<Record<DomainEvent['eventType'], string>> = {
   SALE_COMPLETED: 'complete_sale',
   SALE_CANCELLED: 'void_sale',
   GOODS_RECEIVED: 'receive_goods',
+  WASTE_RECORDED: 'record_waste',
+  STOCK_TRANSFERRED: 'transfer_stock',
+  STOCK_COUNTED: 'apply_inventory_count',
+  BATCH_COMPLETED: 'complete_batch',
+  EXPENSE_RECORDED: 'record_expense',
+  CASH_SESSION_OPENED: 'open_cash_session',
+  CASH_SESSION_CLOSED: 'close_cash_session',
 };
+
+/*
+ * Les trois types restants — PAYMENT_RECEIVED, PURCHASE_REQUESTED,
+ * PURCHASE_ORDER_APPROVED — n'ont volontairement pas de transaction dédiée
+ * ici. Le paiement est déjà porté par `complete_sale` (l'écrire deux fois
+ * doublerait l'encaissement) ; les deux autres attendent l'écran d'approbation
+ * d'achat. Ils restent journalisés dans `domain_events`, ce qui est correct
+ * pour un fait qui n'a pas encore de projection.
+ */
 
 export const supabaseTransport: Transport = async (events) => {
   const outcome: TransportOutcome = { acceptedIds: [], failedIds: [], conflictIds: [] };
@@ -167,6 +183,24 @@ function receiptLinesForRpc(lines: ReceiptLine[]): Record<string, unknown>[] {
   }));
 }
 
+interface ConsumptionLine { itemId: UUID; quantity: number; unit?: Unit }
+
+/**
+ * Les ingrédients consommés par un lot.
+ *
+ * Les quantités partent en valeur absolue : côté client ce sont des mouvements
+ * négatifs (la sortie de stock est déjà signée), côté serveur `complete_batch`
+ * applique lui-même le signe. Envoyer un négatif ferait rentrer les
+ * ingrédients au lieu de les sortir.
+ */
+function consumptionForRpc(lines: ConsumptionLine[]): Record<string, unknown>[] {
+  return lines.map((line) => ({
+    item_id: line.itemId,
+    quantity: Math.abs(line.quantity),
+    unit: line.unit ?? 'unite',
+  }));
+}
+
 /** Traduit un événement local en arguments de sa fonction PostgreSQL. */
 export function buildArgs(event: DomainEvent): Record<string, unknown> {
   const payload = (event.payload ?? {}) as Record<string, unknown>;
@@ -198,6 +232,113 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         p_transport_cost: payload.transportCost ?? 0,
         p_payment_method: payload.paymentMethod ?? 'CASH',
       };
+
+    case 'WASTE_RECORDED':
+      return {
+        p_event_id: event.id,
+        p_waste_id: event.entityId,
+        p_site_id: event.siteId,
+        p_location_id: payload.locationId,
+        p_item_id: payload.itemId,
+        p_quantity: payload.quantity,
+        p_unit: payload.unit ?? 'unite',
+        p_cost: payload.cost ?? 0,
+        p_reason: payload.reason,
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'STOCK_TRANSFERRED':
+      return {
+        p_event_id: event.id,
+        p_transfer_id: event.entityId,
+        p_site_id: event.siteId,
+        p_item_id: payload.itemId,
+        p_from_location_id: payload.from,
+        p_to_location_id: payload.to,
+        p_quantity: payload.quantity,
+        p_unit: payload.unit ?? 'unite',
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'STOCK_COUNTED':
+      return {
+        p_event_id: event.id,
+        p_count_id: payload.countId ?? event.entityId,
+        p_site_id: event.siteId,
+        p_location_id: payload.locationId,
+        p_item_id: payload.itemId,
+        p_unit: payload.unit ?? 'unite',
+        p_theoretical: payload.theoretical,
+        p_counted: payload.counted,
+        p_delta: payload.delta,
+        p_reason: payload.reason,
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'BATCH_COMPLETED':
+      return {
+        p_event_id: event.id,
+        p_batch_id: payload.batchId ?? event.entityId,
+        p_site_id: event.siteId,
+        p_code: payload.code,
+        p_item_id: payload.itemId,
+        p_recipe_version_id: payload.recipeVersionId,
+        p_location_id: payload.locationId,
+        p_planned: payload.planned,
+        p_produced: payload.produced,
+        p_loss: payload.loss ?? 0,
+        p_consumption: consumptionForRpc(
+          (payload.consumption ?? []) as ConsumptionLine[],
+        ),
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'EXPENSE_RECORDED':
+      return {
+        p_event_id: event.id,
+        p_expense_id: payload.expenseId ?? event.entityId,
+        p_site_id: event.siteId,
+        p_amount: payload.amount,
+        p_category: payload.category,
+        p_description: payload.description,
+        // Une dépense sans fournisseur est courante : `asUuid` évite qu'une
+        // chaîne vide parte casser un cast d'UUID côté serveur.
+        p_supplier_id: asUuid(payload.supplierId),
+        p_payment_method: payload.paymentMethod ?? 'CASH',
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'CASH_SESSION_OPENED':
+      return {
+        p_event_id: event.id,
+        p_cash_session_id: payload.cashSessionId ?? event.entityId,
+        p_site_id: event.siteId,
+        p_shift_number: payload.shiftNumber,
+        p_opening_cash: payload.openingCash ?? 0,
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'CASH_SESSION_CLOSED':
+      return {
+        p_event_id: event.id,
+        p_cash_session_id: payload.cashSessionId ?? event.entityId,
+        p_site_id: event.siteId,
+        p_shift_number: payload.shiftNumber,
+        p_opening_cash: payload.openingCash ?? 0,
+        p_expected: payload.expected,
+        p_counted_cash: payload.countedCash,
+        p_variance: payload.variance,
+        p_reason: payload.reason ?? null,
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
     default:
       return {};
   }

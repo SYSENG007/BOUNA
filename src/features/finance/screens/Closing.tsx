@@ -7,16 +7,106 @@ import { Button, Card, Field } from '../../../design-system/components/primitive
 
 const KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '000', '0', '⌫'];
 
+/** Pavé numérique partagé par l'ouverture et la clôture : même geste, même forme. */
+function Keypad({ onPress }: { onPress: (key: string) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {KEYS.map((k) => (
+        <button
+          key={k}
+          onClick={() => onPress(k)}
+          className="no-select num min-h-[60px] rounded-[6px] border border-ink-200 bg-surface text-[20px] text-ink-900 transition-colors active:bg-sable-pale"
+        >
+          {k}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Saisie d'un montant au pavé, avec sa garde de longueur. */
+function useAmount() {
+  const [raw, setRaw] = useState('');
+  const press = (k: string) => {
+    if (k === '⌫') setRaw((r) => r.slice(0, -1));
+    else setRaw((r) => (r.length > 9 ? r : r + k));
+  };
+  return { raw, press, value: Number(raw || 0), reset: () => setRaw('') };
+}
+
 /**
- * Clôture de caisse guidée.
- * Le montant attendu reste masqué jusqu'à la saisie du comptage — sinon on ne
- * compte pas, on recopie.
+ * La caisse a deux moments, et un seul écran.
+ *
+ * Tant qu'aucun shift n'est ouvert, il n'y a rien à compter : l'écran demande
+ * le fond de caisse. Une fois le shift ouvert, il demande le comptage. Séparer
+ * les deux en deux destinations obligerait à savoir laquelle chercher — alors
+ * que la caisse, elle, n'est jamais que dans un état ou dans l'autre.
  */
 export function Closing() {
+  const { state } = useBuna();
+  const open = !state.cashSession.closedAt;
+  return open ? <CloseShift /> : <OpenShift />;
+}
+
+/* ------------------------------------------------------------- Ouverture */
+
+function OpenShift() {
+  const { state, openCashSession } = useBuna();
+  const navigate = useNavigate();
+  const { raw, press, value } = useAmount();
+
+  const shift = state.cashSession.shiftNumber + 1;
+
+  const submit = () => {
+    openCashSession(value);
+    navigate('/vente', { replace: true });
+  };
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col bg-ivoire">
+      <ScreenHeader
+        title="Ouvrez la caisse"
+        subtitle={`Shift #${shift} · fond de caisse`}
+        onBack={() => navigate(-1)}
+      />
+
+      <main className="flex-1 space-y-4 px-4 pb-32 pt-4">
+        <p className="text-[13px] leading-relaxed text-ink-600">
+          Comptez l'argent présent dans le tiroir avant la première vente. C'est ce montant
+          qui servira de référence à la clôture — l'écart se mesure à partir de lui.
+        </p>
+
+        <Card className="text-center">
+          <div className="label-section">Fond de caisse</div>
+          <div className="mt-1 flex items-baseline justify-center gap-2">
+            <span className="t-figure text-[40px] leading-none text-ink-900">
+              {raw ? fcfa(value) : '—'}
+            </span>
+            <span className="text-[13px] text-ink-500">FCFA</span>
+          </div>
+        </Card>
+
+        <Keypad onPress={press} />
+
+        <p className="text-[13px] text-ink-600">
+          Le tiroir peut être vide : saisissez 0, l'ouverture reste nécessaire.
+        </p>
+
+        <Button variant="primary" size="counter" full disabled={!raw} onClick={submit}>
+          Ouvrir la caisse
+        </Button>
+      </main>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- Clôture */
+
+function CloseShift() {
   const { state, closeCashSession } = useBuna();
   const navigate = useNavigate();
+  const { raw, press, value: counted } = useAmount();
 
-  const [raw, setRaw] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -27,14 +117,8 @@ export function Closing() {
     return state.cashSession.openingCash + cash;
   }, [state.sales, state.cashSession.openingCash]);
 
-  const counted = Number(raw || 0);
   const variance = counted - expected;
   const needsReason = revealed && Math.abs(variance) > 0;
-
-  const press = (k: string) => {
-    if (k === '⌫') setRaw((r) => r.slice(0, -1));
-    else setRaw((r) => (r.length > 9 ? r : r + k));
-  };
 
   const submit = () => {
     closeCashSession(counted, reason || undefined);
@@ -64,17 +148,7 @@ export function Closing() {
 
         {!revealed ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
-              {KEYS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => press(k)}
-                  className="no-select num min-h-[60px] rounded-[6px] border border-ink-200 bg-surface text-[20px] text-ink-900 transition-colors active:bg-sable-pale"
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
+            <Keypad onPress={press} />
             <Button variant="primary" size="counter" full disabled={!raw} onClick={() => setRevealed(true)}>
               Comparer à l'attendu
             </Button>
@@ -83,6 +157,10 @@ export function Closing() {
           <>
             <Card padded={false} className="px-4 py-2">
               <div className="flex items-center justify-between py-2.5">
+                <span className="text-[14px] text-ink-700">Fond d'ouverture</span>
+                <span className="num text-[15px] text-ink-900">{fcfaFull(state.cashSession.openingCash)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-ink-100 py-2.5">
                 <span className="text-[14px] text-ink-700">Attendu</span>
                 <span className="num text-[15px] text-ink-900">{fcfaFull(expected)}</span>
               </div>

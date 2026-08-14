@@ -68,15 +68,17 @@ export function Receipt() {
         </p>
       </main>
 
+      {/*
+        Une seule issue, et elle ramène au comptoir.
+        Le reçu est la fin d'une vente, pas le début d'une consultation :
+        proposer ici l'historique sortait du mode boutique entre deux clients,
+        et il fallait retrouver seul le chemin du retour. L'historique reste
+        accessible depuis le tiroir, quand on a fini de vendre.
+      */}
       <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
-        <div className="flex gap-2.5">
-          <Button size="counter" className="flex-1" onClick={() => navigate('/vente/historique')}>
-            Voir les ventes
-          </Button>
-          <Button variant="primary" size="counter" className="flex-[1.4]" onClick={() => navigate('/vente')}>
-            Nouvelle vente
-          </Button>
-        </div>
+        <Button variant="primary" size="counter" full onClick={() => navigate('/vente', { replace: true })}>
+          Vente suivante
+        </Button>
       </div>
     </div>
   );

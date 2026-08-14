@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useBuna } from '../../../store/BunaStore';
 import { POST_LABEL } from '../../../domain/capabilities';
 import { clearState } from '../../../store/persist';
-import { capabilitiesByFeature, operationsByFeature } from '../../registry';
+import { operationsByFeature } from '../../registry';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { Badge, Button, Card, SectionLabel } from '../../../design-system/components/primitives';
 import { BunaLogo } from '../../../design-system/components/BunaLogo';
@@ -11,24 +11,21 @@ import { BunaLogo } from '../../../design-system/components/BunaLogo';
 /**
  * Le profil.
  *
- * Il répond à deux questions : « qui suis-je dans cette équipe ? » et
- * « qu'est-ce que je peux faire ? ». La seconde était invisible jusqu'ici —
- * quelqu'un qui ne trouvait pas un écran ne pouvait pas savoir s'il ne l'avait
- * pas ou s'il cherchait mal. Les accès sont donc listés, avec de quoi les
- * réclamer.
+ * Il répond à « qui suis-je dans cette équipe ? » et donne les raccourcis vers
+ * ce qu'on fait le plus souvent.
+ *
+ * Il ne liste plus les droits : la navigation les exprime déjà, puisqu'on n'y
+ * voit que ce qu'on peut faire. Énumérer en plus des libellés que personne ne
+ * peut s'accorder soi-même n'ajoutait qu'une page à lire.
  */
 export function Profil() {
-  const { user, state, logout, pending, online, lastSyncAt, syncNow, can } = useBuna();
+  const { user, state, logout, pending, online, lastSyncAt, syncNow, can, outboxDurable } = useBuna();
   const navigate = useNavigate();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   /* Les raccourcis parlent de gestes, la liste des accès parle de droits. */
   const shortcutGroups = useMemo(
     () => operationsByFeature(user?.capabilities ?? [], true, true),
-    [user?.capabilities],
-  );
-  const accessGroups = useMemo(
-    () => capabilitiesByFeature(user?.capabilities ?? []),
     [user?.capabilities],
   );
 
@@ -53,9 +50,6 @@ export function Profil() {
             <h1 className="font-display text-[24px] leading-tight text-cafe">{user.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Badge tone="conforme">{POST_LABEL[user.post]}</Badge>
-              <span className="text-[12px] text-ink-500">
-                {user.capabilities.length} accès accordé{user.capabilities.length > 1 ? 's' : ''}
-              </span>
             </div>
           </div>
         </div>
@@ -71,34 +65,21 @@ export function Profil() {
           </Card>
         )}
 
-        <Card className="space-y-3">
-          <SectionLabel>Vos accès</SectionLabel>
-          {accessGroups.length === 0 ? (
+        {/*
+          La liste des accès a été retirée : elle énumérait des droits que la
+          personne ne peut de toute façon pas s'accorder, et que la navigation
+          exprime déjà — ce qu'on peut faire est ce qu'on voit. Reste le seul
+          cas où le silence serait cruel : un compte sans aucun accès, qui doit
+          savoir quoi demander et à qui.
+        */}
+        {shortcuts.length === 0 && (
+          <Card>
             <p className="text-[13.5px] leading-relaxed text-ink-600">
               Aucun accès ne vous a encore été accordé. Votre manager peut vous en donner
               depuis l'écran Équipe.
             </p>
-          ) : (
-            <div className="space-y-3">
-              {accessGroups.map(({ feature, rows }) => (
-                <div key={feature.id}>
-                  <div className="label-section mb-1 text-ink-500">{feature.label}</div>
-                  <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-                    {rows.map((r) => (
-                      <li key={r.capability}>
-                        <Badge>{r.label}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-[12px] leading-relaxed text-ink-500">
-            Votre poste ne décide pas de vos accès : chacun vous a été accordé par quelqu'un,
-            et reste consultable dans le journal.
-          </p>
-        </Card>
+          </Card>
+        )}
 
         {can('MANAGE_TEAM') && (
           <Card className="space-y-3">
@@ -143,9 +124,20 @@ export function Profil() {
           <Button full onClick={() => void syncNow()} disabled={!online || pending === 0}>
             Synchroniser maintenant
           </Button>
-          {!online && (
+          {!online && outboxDurable && (
             <p className="text-[12px] leading-relaxed text-ink-500">
               Mode hors ligne — vos opérations partiront au retour du réseau. Rien n'est perdu.
+            </p>
+          )}
+
+          {/* Le seul cas où l'on ne peut PAS promettre que rien n'est perdu.
+              Le taire serait pire que tout : quelqu'un continuerait à encaisser
+              hors ligne en croyant que l'appareil retient ses ventes. */}
+          {!outboxDurable && (
+            <p className="text-[12px] leading-relaxed text-critique">
+              Cet appareil n'arrive plus à mettre vos opérations de côté. Synchronisez maintenant,
+              tant que le réseau est là — et évitez d'encaisser hors ligne jusqu'à ce que ce message
+              disparaisse.
             </p>
           )}
         </Card>

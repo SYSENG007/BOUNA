@@ -4,7 +4,6 @@ import { CartProvider } from './features/vente/CartContext';
 import { AppShell } from './shell/AppShell';
 import { Login } from './shell/Login';
 import { homeFor } from './shell/navigation';
-import { Denied } from './shell/Denied';
 import type { Capability } from './domain/capabilities';
 
 import { Pos } from './features/vente/screens/Pos';
@@ -44,18 +43,19 @@ import { Profil } from './features/pilotage/screens/Profil';
 /**
  * Garde de route.
  *
- * L'utilisateur ne devrait jamais atteindre un écran qu'il n'a pas le droit
- * d'ouvrir — la navigation ne le lui propose pas. Mais une URL se tape, se
- * partage et se met en favori : la garde est ce qui rend cette promesse vraie.
+ * Ce qu'on ne peut pas faire n'existe pas : la navigation ne le propose pas, et
+ * l'URL n'y mène pas non plus — elle ramène chez soi, sans commentaire.
+ * Annoncer « vous n'avez pas accès » nomme une porte que la personne ne peut
+ * pas ouvrir ; elle repart avec une question au lieu d'un écran utile.
  *
- * Elle ne protège rien par elle-même : c'est RLS qui protège. Elle évite
- * d'afficher une page vide et de laisser croire à une panne.
+ * La garde ne protège rien par elle-même : c'est RLS qui protège. Elle décide
+ * seulement de ce qu'on montre.
  */
 function Guard({ need, children }: { need: Capability[]; children: React.ReactNode }) {
   const { user } = useBuna();
   if (!user) return <Login />;
   if (need.some((c) => user.capabilities.includes(c))) return <>{children}</>;
-  return <Denied need={need} />;
+  return <Navigate to={homeFor(user.capabilities)} replace />;
 }
 
 const guard = (need: Capability[], element: React.ReactNode) => <Guard need={need}>{element}</Guard>;

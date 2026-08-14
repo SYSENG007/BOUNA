@@ -10,6 +10,7 @@ import { POST_LABEL } from '../domain/capabilities';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Login } from './Login';
 import { OperationSheet } from './OperationSheet';
+import { NavigationSheet } from './NavigationSheet';
 import { railFor, tabsFor, type NavItem } from './navigation';
 
 /**
@@ -23,6 +24,22 @@ const IMMERSIVE = [
   '/finance/caisse', '/appro/commande', '/appro/reception', '/finance/depense',
 ];
 
+/**
+ * Le mode boutique.
+ *
+ * Au comptoir, on ne navigue pas : on vend, et on recommence. La coque
+ * s'efface donc entièrement — rail replié, onglets masqués — et on n'en sort
+ * que par un geste explicite, « Sortir de la boutique ». Laisser la navigation
+ * à portée de pouce pendant un service, c'est inviter à la quitter par erreur
+ * entre deux clients.
+ *
+ * L'historique des ventes n'en fait pas partie : on le consulte, on ne vend
+ * pas dedans.
+ */
+function isShopMode(pathname: string): boolean {
+  return pathname.startsWith('/vente') && pathname !== '/vente/historique';
+}
+
 /** Largeurs du rail. Replié, il garde 44 px de cible tactile plus ses marges. */
 const RAIL_OPEN = '268px';
 const RAIL_SHUT = '76px';
@@ -34,6 +51,7 @@ export function AppShell() {
   const { isMobile } = useAdaptive();
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   /* Le choix de repli suit la personne d'une session à l'autre : c'est une
      préférence d'espace de travail, pas un état d'écran. */
@@ -49,21 +67,27 @@ export function AppShell() {
     });
   }, []);
 
+  /* En boutique, le rail est replié quoi qu'en dise la préférence — mais la
+     préférence n'est pas écrasée : on la retrouve intacte en sortant. */
+  const shopMode = isShopMode(pathname);
+  const railShut = collapsed || shopMode;
+
   /* Le rail porte la largeur que `.rail-bar` lit pour se caler : toute barre
      d'action ancrée en bas doit suivre le repli, sinon elle passe dessous. */
   useEffect(() => {
     if (isMobile) return;
     const root = document.documentElement;
-    root.style.setProperty('--nav-rail', collapsed ? RAIL_SHUT : RAIL_OPEN);
+    root.style.setProperty('--nav-rail', railShut ? RAIL_SHUT : RAIL_OPEN);
     return () => { root.style.removeProperty('--nav-rail'); };
-  }, [collapsed, isMobile]);
+  }, [railShut, isMobile]);
 
   if (!user) return <Login />;
 
-  const firstName = user.name.split(' ')[0];
   const initials = user.name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
-  const immersive = IMMERSIVE.includes(pathname);
-  const tabs = tabsFor(user.capabilities, firstName);
+  /* La barre d'onglets disparaît aussi en boutique : c'est le même principe
+     que les écrans en plein flux, appliqué à tout le geste de vente. */
+  const immersive = IMMERSIVE.includes(pathname) || shopMode;
+  const tabs = tabsFor(user.capabilities);
   const rail = railFor(user.capabilities);
 
   return (
@@ -73,86 +97,115 @@ export function AppShell() {
           className={clsx(
             'sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-cafe py-8 text-sable-pale',
             'transition-[width,padding] duration-200 ease-out',
-            collapsed ? 'items-center gap-6 px-3' : 'gap-8 px-5',
+            railShut ? 'items-center gap-6 px-3' : 'gap-8 px-5',
           )}
           style={{ width: 'var(--nav-rail)' }}
         >
-          {collapsed
+          {railShut
             ? <BunaLogo size={38} />
             : <BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
 
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
-            title={collapsed ? 'Déclarer' : undefined}
+            title={railShut ? 'Déclarer' : undefined}
             className={clsx(
               'flex min-h-[46px] items-center justify-center gap-2 rounded-[6px] bg-brun text-[14px] font-medium text-sable-pale transition-colors hover:bg-brun-deep',
-              collapsed ? 'w-[46px]' : 'w-full px-3',
+              railShut ? 'w-[46px]' : 'w-full px-3',
             )}
           >
             <span className="text-[17px] leading-none">+</span>
-            {!collapsed && 'Déclarer'}
+            {!railShut && 'Déclarer'}
           </button>
 
           <nav className="flex w-full flex-col gap-0.5">
-            {rail.map((item) => <RailLink key={item.to} item={item} collapsed={collapsed} />)}
+            {rail.map((item) => <RailLink key={item.to} item={item} collapsed={railShut} />)}
           </nav>
 
           <div className="mt-auto flex w-full flex-col gap-4">
-            <div
-              className={clsx(
-                'border-t border-[#4A362A] pt-4',
-                collapsed ? 'flex flex-col items-center gap-3' : 'flex items-center justify-between',
-              )}
-            >
+            {/*
+              Le pied du rail porte deux gestes de nature différente : entrer
+              chez soi, et sortir de l'application. Ils ne se ressemblent donc
+              pas — le profil est une destination pleine, la déconnexion une
+              sortie discrète. Le survol le confirme avant le clic : le profil
+              s'éclaire et sa pastille avance, la déconnexion vire au critique
+              et sa flèche glisse vers la sortie.
+            */}
+            <div className="flex flex-col gap-1 border-t border-[#4A362A] pt-3">
               <button
                 type="button"
                 onClick={() => navigate('/moi')}
-                title={collapsed ? `${user.name} · ${POST_LABEL[user.post]}` : undefined}
-                className="group text-left"
+                title={railShut ? `${user.name} · ${POST_LABEL[user.post]}` : undefined}
+                className={clsx(
+                  'group flex min-h-[48px] items-center rounded-[6px] text-left',
+                  'transition-colors duration-150 hover:bg-cafe-soft',
+                  railShut ? 'justify-center px-0' : 'gap-3 px-2',
+                )}
               >
-                {collapsed ? (
-                  <span className="num flex h-[38px] w-[38px] items-center justify-center rounded-full bg-cafe-soft text-[13px] tracking-[0.04em] text-sable-pale transition-colors group-hover:bg-brun">
-                    {initials}
+                <span
+                  className={clsx(
+                    'num flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full',
+                    'bg-cafe-soft text-[12.5px] tracking-[0.04em] text-sable-pale',
+                    'transition-[background-color,transform] duration-150',
+                    'group-hover:bg-brun motion-safe:group-hover:-translate-y-px',
+                  )}
+                >
+                  {initials}
+                </span>
+                {!railShut && (
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-medium text-sable-pale transition-colors group-hover:text-white">
+                      {user.name}
+                    </span>
+                    <span className="num mt-0.5 block text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
+                      {POST_LABEL[user.post].toUpperCase()}
+                    </span>
                   </span>
-                ) : (
-                  <>
-                    <div className="text-[13.5px] font-medium text-sable-pale group-hover:text-white">{user.name}</div>
-                    <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
-                      {POST_LABEL[user.post].toUpperCase()} · {user.capabilities.length} ACCÈS
-                    </div>
-                  </>
                 )}
               </button>
-              {!collapsed && (
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="rounded px-2 py-1 text-[12px] font-medium text-[#B9A895] transition-colors hover:bg-cafe-soft hover:text-sable-pale"
-                >
-                  Déconnexion
-                </button>
-              )}
+
+              <button
+                type="button"
+                onClick={logout}
+                title={railShut ? 'Déconnexion' : undefined}
+                aria-label="Déconnexion"
+                className={clsx(
+                  'group flex min-h-[40px] items-center rounded-[6px] text-[12.5px] font-medium',
+                  'text-[#9E8B77] transition-colors duration-150',
+                  'hover:bg-critique-deep/25 hover:text-sable-pale',
+                  railShut ? 'justify-center px-0' : 'gap-2 px-2',
+                )}
+              >
+                <IconChevronRight
+                  size={17}
+                  className="shrink-0 transition-transform duration-150 motion-safe:group-hover:translate-x-0.5"
+                />
+                {!railShut && 'Déconnexion'}
+              </button>
             </div>
 
-            {!collapsed && <SyncIndicator compact />}
+            {!railShut && <SyncIndicator compact />}
 
             {/* Le repli est une préférence, donc il se commande depuis le rail
-                lui-même — pas depuis un réglage enfoui trois écrans plus loin. */}
-            <button
-              type="button"
-              onClick={toggleRail}
-              aria-expanded={!collapsed}
-              title={collapsed ? 'Déplier le menu' : 'Replier le menu'}
-              className={clsx(
-                'flex min-h-[38px] items-center gap-2 rounded-[6px] text-[12.5px] font-medium text-[#9E8B77]',
-                'transition-colors hover:bg-cafe-soft hover:text-sable-pale',
-                collapsed ? 'w-[46px] justify-center' : 'w-full px-3',
-              )}
-            >
-              {collapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
-              {!collapsed && 'Replier le menu'}
-            </button>
+                lui-même — pas depuis un réglage enfoui trois écrans plus loin.
+                En boutique il disparaît : le rail y est replié d'office, et
+                proposer de le déplier promettrait un geste sans effet. */}
+            {!shopMode && (
+              <button
+                type="button"
+                onClick={toggleRail}
+                aria-expanded={!collapsed}
+                title={collapsed ? 'Déplier le menu' : 'Replier le menu'}
+                className={clsx(
+                  'flex min-h-[38px] items-center gap-2 rounded-[6px] text-[12.5px] font-medium text-[#9E8B77]',
+                  'transition-colors hover:bg-cafe-soft hover:text-sable-pale',
+                  collapsed ? 'w-[46px] justify-center' : 'w-full px-3',
+                )}
+              >
+                {collapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
+                {!collapsed && 'Replier le menu'}
+              </button>
+            )}
           </div>
         </aside>
       )}
@@ -184,7 +237,9 @@ export function AppShell() {
               {tabs.map((item, i) =>
                 item.opensSheet
                   ? <SheetTab key={`sheet-${i}`} item={item} onOpen={() => setSheetOpen(true)} />
-                  : <Tab key={`${item.to}-${i}`} item={item} />,
+                  : item.opensMenu
+                    ? <MenuTab key={`menu-${i}`} item={item} onOpen={() => setMenuOpen(true)} />
+                    : <Tab key={`${item.to}-${i}`} item={item} />,
               )}
             </div>
           </nav>
@@ -192,6 +247,7 @@ export function AppShell() {
       </div>
 
       <OperationSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <NavigationSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   );
 }
@@ -238,6 +294,24 @@ function SheetTab({ item, onOpen }: { item: NavItem; onOpen: () => void }) {
         style={{ boxShadow: 'var(--shadow-key)' }}>
         +
       </span>
+      <span className="text-[10.5px] font-medium">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * Le dernier emplacement. Il ouvre le menu — c'est par lui qu'on atteint tout
+ * ce que la barre n'a pas pu porter, donc il ne doit jamais disparaître.
+ */
+function MenuTab({ item, onOpen }: { item: NavItem; onOpen: () => void }) {
+  const { label, Icon } = item;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="no-select flex min-h-[60px] flex-1 flex-col items-center justify-center gap-1 py-2 text-ink-400 transition-colors hover:text-cafe"
+    >
+      <Icon size={21} strokeWidth={1.6} />
       <span className="text-[10.5px] font-medium">{label}</span>
     </button>
   );

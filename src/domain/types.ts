@@ -95,6 +95,25 @@ export interface Item {
   imageUrl?: string;
   /** Retiré du catalogue sans être supprimé : l'historique doit rester lisible. */
   archived?: boolean;
+  /**
+   * Comment le produit fini existe.
+   *
+   * `BATCH` : préparé d'avance, il a un stock qui se compte et se vend.
+   * `MADE_TO_ORDER` : assemblé devant le client — il n'a jamais de stock
+   * propre, sa disponibilité tient à celle de ses ingrédients. Compter un
+   * stock de produit fini sur un café glacé n'aurait aucun sens : il n'en
+   * existe aucun tant que personne ne l'a commandé.
+   *
+   * Absent = `BATCH`, qui reste le comportement par défaut du schéma.
+   */
+  productionMode?: ProductionMode;
+}
+
+export type ProductionMode = 'BATCH' | 'MADE_TO_ORDER';
+
+/** Un produit assemblé à la commande n'a pas de stock de produit fini. */
+export function isMadeToOrder(item: { productionMode?: ProductionMode }): boolean {
+  return item.productionMode === 'MADE_TO_ORDER';
 }
 
 /* -------------------------------------------------------------- Recettes */

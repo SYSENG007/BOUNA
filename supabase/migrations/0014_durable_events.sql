@@ -1,63 +1,26 @@
--- =====================================================================
--- BUNA Operations — 0013 : les douze faits qui n'arrivaient nulle part
+-- 0014 — Les événements durables.
 --
--- `RPC_BY_EVENT` ne connaissait que trois transactions : la vente, son
--- annulation, la réception. Les douze autres événements partaient dans
--- `domain_events` comme une ligne JSON inerte — et le transport les
--- comptait comme acceptés. Vérifié en base : AUCUN déclencheur ne rejoue
--- `domain_events`. Une perte déclarée n'existait donc nulle part ailleurs
--- que sur le téléphone qui l'avait saisie, et la première hydratation la
--- faisait disparaître : `HYDRATE_SNAPSHOT` remplace les mouvements par la
--- version serveur. Le stock remontait tout seul, après un « synchronisé ».
+-- Ce fichier est le RELEVÉ des fonctions réellement en production, pas une
+-- proposition. Elles y ont été appliquées hors du chemin normal ; le dépôt les
+-- rattrape ici pour qu'une base reconstruite depuis `supabase/migrations/`
+-- redonne exactement la base actuelle.
 --
--- Ce fichier écrit les transactions manquantes. Chacune suit le patron de
--- `complete_sale` :
+-- Elles ferment la perte silencieuse décrite dans le bilan de production :
+-- douze types d'événements sur quinze arrivaient dans `domain_events` sans
+-- qu'aucune projection ne les rejoue, et l'hydratation suivante les effaçait.
+-- Chacune commence par son contrôle d'idempotence sur `p_event_id` (RULE-004),
+-- est gardée par `has_capability()`, et n'écrit jamais de niveau de stock —
+-- uniquement des `stock_movements` (RULE-002 / RULE-003).
 --
---   1. contrôle d'idempotence sur `p_event_id` — un retry réseau retrouve
---      l'entité déjà produite au lieu d'en fabriquer une seconde ;
---   2. garde de capacité, avec un message qui parle à la personne ;
---   3. pose de `buna.capability` : c'est ce que le déclencheur d'estampille
---      de 0012 lira pour dire SOUS QUELLE autorisation le fait a eu lieu ;
---   4. écriture du fait, de ses mouvements de stock, de la ligne
---      `domain_events` et de la ligne de journal — dans LA MÊME transaction.
---
--- RULE-002 / RULE-003 : aucune de ces fonctions n'écrit un niveau de stock.
--- Un stock se déduit de `stock_movements`, toujours.
---
--- Les unités et les énumérations arrivent en `text` puis sont converties
--- ici. PostgREST résout la fonction par le nom de ses arguments : un
--- paramètre typé enum l'oblige à deviner un cast, un paramètre `text` ne
--- laisse aucune place au doute — et un code invalide échoue franchement
--- (22P02), ce que le transport sait lire comme un refus définitif.
--- =====================================================================
+-- `record_payment` et `resolve_variance`, présentes dans le brouillon initial,
+-- ne sont volontairement PAS ici : le paiement est déjà porté par
+-- `complete_sale` — l'écrire deux fois doublerait l'encaissement.
 
-begin;
 
--- ---------------------------------------------------------------------
--- 1. LA PERTE
---
--- Déclarer une perte, c'est deux faits : l'événement de perte, qui porte
--- le motif et le coût, et le mouvement négatif qui l'inscrit au stock.
--- Séparés, ils divergent ; ensemble, ils tiennent.
--- ---------------------------------------------------------------------
-
-create or replace function public.record_waste(
-  p_event_id         uuid,
-  p_waste_id         uuid,
-  p_site_id          uuid,
-  p_location_id      uuid,
-  p_item_id          uuid,
-  p_quantity         numeric,
-  p_unit             text,
-  p_cost             numeric,
-  p_reason           text,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.record_waste(p_event_id uuid, p_waste_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_quantity numeric, p_unit text, p_cost numeric, p_reason text, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_waste_id uuid; v_existing uuid; v_at timestamptz; v_unit public.unit_code;
@@ -145,30 +108,10 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 2. LE TRANSFERT
---
--- §30 — deux mouvements qui partagent la même référence. Aucune table de
--- transfert : le transfert EST la paire de mouvements. En écrire un seul
--- ferait apparaître ou disparaître de la marchandise.
--- ---------------------------------------------------------------------
-
-create or replace function public.transfer_stock(
-  p_event_id          uuid,
-  p_transfer_id       uuid,
-  p_site_id           uuid,
-  p_item_id           uuid,
-  p_from_location_id  uuid,
-  p_to_location_id    uuid,
-  p_quantity          numeric,
-  p_unit              text,
-  p_created_at_local  timestamptz default null,
-  p_device_id         text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.transfer_stock(p_event_id uuid, p_transfer_id uuid, p_site_id uuid, p_item_id uuid, p_from_location_id uuid, p_to_location_id uuid, p_quantity numeric, p_unit text, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_transfer_id uuid; v_existing uuid; v_at timestamptz; v_unit public.unit_code;
@@ -245,37 +188,126 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 3. LA PRÉPARATION
---
--- La consommation arrive du client, comme les lignes d'une réception : il
--- a déjà décidé d'OÙ sort chaque ingrédient (le lait est au frigo, pas à
--- la cuisine). La recalculer ici sur l'emplacement de sortie ferait
--- plonger un emplacement en négatif pendant qu'un autre reste plein.
--- Faute de lignes, on retombe sur la recette — mieux qu'aucune consommation.
--- ---------------------------------------------------------------------
+CREATE FUNCTION public.apply_inventory_count(p_event_id uuid, p_count_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_unit text, p_theoretical numeric, p_counted numeric, p_delta numeric, p_reason text, p_variance_id uuid DEFAULT NULL::uuid, p_variance_amount numeric DEFAULT 0, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
+  v_count_id uuid; v_existing uuid; v_at timestamptz; v_unit public.unit_code;
+  v_delta numeric; v_item_name text;
+begin
+  select entity_id into v_existing from public.domain_events
+    where id = p_event_id and event_type = 'STOCK_COUNTED';
+  if v_existing is not null then
+    return v_existing;
+  end if;
 
-create or replace function public.complete_batch(
-  p_event_id         uuid,
-  p_batch_id         uuid,
-  p_site_id          uuid,
-  p_code             text,
-  p_item_id          uuid,
-  p_recipe_version_id uuid,
-  p_location_id      uuid,
-  p_planned          numeric,
-  p_produced         numeric,
-  p_loss             numeric,
-  p_consumption      jsonb default '[]'::jsonb,  -- [{item_id, location_id, quantity, unit}]
-  p_variance_id      uuid default null,
-  p_variance_amount  numeric default 0,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+  select organization_id, post, name into v_org, v_post, v_user_name
+    from public.profiles where id = v_user;
+  if v_org is null then
+    raise exception 'Utilisateur sans organisation';
+  end if;
+
+  if not public.has_capability('COUNT_INVENTORY') then
+    raise exception 'Vous n''avez pas l''autorisation de compter un emplacement.'
+      using errcode = '42501';
+  end if;
+
+  perform set_config('buna.capability', 'COUNT_INVENTORY', true);
+
+  v_delta := coalesce(p_delta, coalesce(p_counted, 0) - coalesce(p_theoretical, 0));
+
+  if v_delta <> 0 and coalesce(trim(p_reason), '') = '' then
+    raise exception 'RULE-008 : un écart de comptage dit toujours pourquoi';
+  end if;
+
+  v_at       := coalesce(p_created_at_local, now());
+  v_unit     := p_unit::public.unit_code;
+  v_count_id := coalesce(p_count_id, gen_random_uuid());
+  select name into v_item_name from public.items where id = p_item_id;
+
+  insert into public.inventory_counts (
+    id, organization_id, location_id, user_id, status, created_at, validated_at,
+    actor_user_id, actor_user_name, actor_post, actor_capability, actor_at, device_id
+  ) values (
+    v_count_id, v_org, p_location_id, v_user, 'VALIDATED', v_at, v_at,
+    v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at, p_device_id
+  )
+  on conflict (id) do nothing;
+
+  -- `variance` est une colonne générée (compté − théorique) : l'écrire
+  -- lèverait 428C9. Le serveur la calcule, on ne la déclare pas.
+  insert into public.inventory_count_lines (
+    inventory_count_id, item_id, theoretical, counted, reason
+  ) values (
+    v_count_id, p_item_id, coalesce(p_theoretical, 0), coalesce(p_counted, 0),
+    nullif(trim(coalesce(p_reason, '')), '')
+  );
+
+  -- Un comptage conforme ne produit pas de mouvement : le journal du stock
+  -- ne se remplit pas de lignes à zéro (la table les refuse, d'ailleurs).
+  if v_delta <> 0 then
+    insert into public.stock_movements (
+      organization_id, site_id, location_id, item_id, quantity, unit,
+      movement_type, reference_type, reference_id, user_id, device_id, created_at,
+      actor_user_id, actor_user_name, actor_post, actor_capability, actor_at
+    ) values (
+      v_org, p_site_id, p_location_id, p_item_id, v_delta, v_unit,
+      'ADJUSTMENT', 'InventoryCount', v_count_id, v_user, p_device_id, v_at,
+      v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at
+    );
+
+    if p_variance_id is not null then
+      insert into public.variances (
+        id, organization_id, site_id, source, reference_id, subject,
+        theoretical, declared, delta, amount,
+        actor_user_id, actor_user_name, actor_post, actor_capability, created_at
+      ) values (
+        p_variance_id, v_org, p_site_id, 'STOCK', v_count_id,
+        coalesce(v_item_name, 'article'),
+        coalesce(p_theoretical, 0), coalesce(p_counted, 0), v_delta,
+        abs(coalesce(p_variance_amount, 0)),
+        v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at
+      )
+      on conflict (id) do nothing;
+    end if;
+  end if;
+
+  insert into public.domain_events (
+    id, organization_id, site_id, event_type, entity_type, entity_id,
+    actor_user_id, device_id, payload, created_at_local
+  ) values (
+    p_event_id, v_org, p_site_id, 'STOCK_COUNTED', 'InventoryCount', v_count_id,
+    v_user, p_device_id,
+    jsonb_build_object('itemId', p_item_id, 'locationId', p_location_id, 'unit', p_unit,
+                       'theoretical', p_theoretical, 'counted', p_counted,
+                       'delta', v_delta, 'reason', p_reason),
+    v_at
+  );
+
+  insert into public.audit_events (
+    organization_id, user_id, user_name, post, action, detail, reference,
+    device_id, capability, created_at
+  ) values (
+    v_org, v_user, v_user_name, v_post,
+    format('Inventaire — %s', coalesce(v_item_name, 'article')),
+    format('théorique %s · compté %s · écart %s %s · motif : %s',
+           round(coalesce(p_theoretical, 0), 2), p_counted,
+           case when v_delta > 0 then '+' else '' end || round(v_delta, 2), p_unit,
+           coalesce(p_reason, '—')),
+    format('count:%s', left(v_count_id::text, 8)),
+    p_device_id, 'COUNT_INVENTORY', v_at
+  );
+
+  return v_count_id;
+end;
+$$;
+
+CREATE FUNCTION public.complete_batch(p_event_id uuid, p_batch_id uuid, p_site_id uuid, p_code text, p_item_id uuid, p_recipe_version_id uuid, p_location_id uuid, p_planned numeric, p_produced numeric, p_loss numeric, p_consumption jsonb DEFAULT '[]'::jsonb, p_variance_id uuid DEFAULT NULL::uuid, p_variance_amount numeric DEFAULT 0, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_batch_id uuid; v_existing uuid; v_at timestamptz;
@@ -424,166 +456,10 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 4. LE COMPTAGE
---
--- Compter ne corrige pas le stock : ça constate un écart et l'inscrit
--- comme un mouvement d'ajustement motivé (RULE-003 / RULE-008). Le stock
--- reste la somme des mouvements, y compris celui-là.
--- ---------------------------------------------------------------------
-
-create or replace function public.apply_inventory_count(
-  p_event_id         uuid,
-  p_count_id         uuid,
-  p_site_id          uuid,
-  p_location_id      uuid,
-  p_item_id          uuid,
-  p_unit             text,
-  p_theoretical      numeric,
-  p_counted          numeric,
-  p_delta            numeric,
-  p_reason           text,
-  p_variance_id      uuid default null,
-  p_variance_amount  numeric default 0,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
-  v_count_id uuid; v_existing uuid; v_at timestamptz; v_unit public.unit_code;
-  v_delta numeric; v_item_name text;
-begin
-  select entity_id into v_existing from public.domain_events
-    where id = p_event_id and event_type = 'STOCK_COUNTED';
-  if v_existing is not null then
-    return v_existing;
-  end if;
-
-  select organization_id, post, name into v_org, v_post, v_user_name
-    from public.profiles where id = v_user;
-  if v_org is null then
-    raise exception 'Utilisateur sans organisation';
-  end if;
-
-  if not public.has_capability('COUNT_INVENTORY') then
-    raise exception 'Vous n''avez pas l''autorisation de compter un emplacement.'
-      using errcode = '42501';
-  end if;
-
-  perform set_config('buna.capability', 'COUNT_INVENTORY', true);
-
-  v_delta := coalesce(p_delta, coalesce(p_counted, 0) - coalesce(p_theoretical, 0));
-
-  if v_delta <> 0 and coalesce(trim(p_reason), '') = '' then
-    raise exception 'RULE-008 : un écart de comptage dit toujours pourquoi';
-  end if;
-
-  v_at       := coalesce(p_created_at_local, now());
-  v_unit     := p_unit::public.unit_code;
-  v_count_id := coalesce(p_count_id, gen_random_uuid());
-  select name into v_item_name from public.items where id = p_item_id;
-
-  insert into public.inventory_counts (
-    id, organization_id, location_id, user_id, status, created_at, validated_at,
-    actor_user_id, actor_user_name, actor_post, actor_capability, actor_at, device_id
-  ) values (
-    v_count_id, v_org, p_location_id, v_user, 'VALIDATED', v_at, v_at,
-    v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at, p_device_id
-  )
-  on conflict (id) do nothing;
-
-  -- `variance` est une colonne générée (compté − théorique) : l'écrire
-  -- lèverait 428C9. Le serveur la calcule, on ne la déclare pas.
-  insert into public.inventory_count_lines (
-    inventory_count_id, item_id, theoretical, counted, reason
-  ) values (
-    v_count_id, p_item_id, coalesce(p_theoretical, 0), coalesce(p_counted, 0),
-    nullif(trim(coalesce(p_reason, '')), '')
-  );
-
-  -- Un comptage conforme ne produit pas de mouvement : le journal du stock
-  -- ne se remplit pas de lignes à zéro (la table les refuse, d'ailleurs).
-  if v_delta <> 0 then
-    insert into public.stock_movements (
-      organization_id, site_id, location_id, item_id, quantity, unit,
-      movement_type, reference_type, reference_id, user_id, device_id, created_at,
-      actor_user_id, actor_user_name, actor_post, actor_capability, actor_at
-    ) values (
-      v_org, p_site_id, p_location_id, p_item_id, v_delta, v_unit,
-      'ADJUSTMENT', 'InventoryCount', v_count_id, v_user, p_device_id, v_at,
-      v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at
-    );
-
-    if p_variance_id is not null then
-      insert into public.variances (
-        id, organization_id, site_id, source, reference_id, subject,
-        theoretical, declared, delta, amount,
-        actor_user_id, actor_user_name, actor_post, actor_capability, created_at
-      ) values (
-        p_variance_id, v_org, p_site_id, 'STOCK', v_count_id,
-        coalesce(v_item_name, 'article'),
-        coalesce(p_theoretical, 0), coalesce(p_counted, 0), v_delta,
-        abs(coalesce(p_variance_amount, 0)),
-        v_user, v_user_name, v_post, 'COUNT_INVENTORY', v_at
-      )
-      on conflict (id) do nothing;
-    end if;
-  end if;
-
-  insert into public.domain_events (
-    id, organization_id, site_id, event_type, entity_type, entity_id,
-    actor_user_id, device_id, payload, created_at_local
-  ) values (
-    p_event_id, v_org, p_site_id, 'STOCK_COUNTED', 'InventoryCount', v_count_id,
-    v_user, p_device_id,
-    jsonb_build_object('itemId', p_item_id, 'locationId', p_location_id, 'unit', p_unit,
-                       'theoretical', p_theoretical, 'counted', p_counted,
-                       'delta', v_delta, 'reason', p_reason),
-    v_at
-  );
-
-  insert into public.audit_events (
-    organization_id, user_id, user_name, post, action, detail, reference,
-    device_id, capability, created_at
-  ) values (
-    v_org, v_user, v_user_name, v_post,
-    format('Inventaire — %s', coalesce(v_item_name, 'article')),
-    format('théorique %s · compté %s · écart %s %s · motif : %s',
-           round(coalesce(p_theoretical, 0), 2), p_counted,
-           case when v_delta > 0 then '+' else '' end || round(v_delta, 2), p_unit,
-           coalesce(p_reason, '—')),
-    format('count:%s', left(v_count_id::text, 8)),
-    p_device_id, 'COUNT_INVENTORY', v_at
-  );
-
-  return v_count_id;
-end;
-$$;
-
--- ---------------------------------------------------------------------
--- 5. LA DÉPENSE
--- ---------------------------------------------------------------------
-
-create or replace function public.record_expense(
-  p_event_id         uuid,
-  p_expense_id       uuid,
-  p_site_id          uuid,
-  p_amount           numeric,
-  p_category         text,
-  p_description      text,
-  p_supplier_id      uuid default null,
-  p_payment_method   text default 'CASH',
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.record_expense(p_event_id uuid, p_expense_id uuid, p_site_id uuid, p_amount numeric, p_category text, p_description text, p_supplier_id uuid DEFAULT NULL::uuid, p_payment_method text DEFAULT 'CASH'::text, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_expense_id uuid; v_existing uuid; v_at timestamptz;
@@ -654,31 +530,10 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 6. LA CAISSE
---
--- `cash_sessions` ne porte pas de colonnes `actor_*` : la traçabilité de
--- la caisse passe par `seller_id`, le journal et `domain_events`.
---
--- La clôture crée la session si elle n'existe pas encore : un poste peut
--- avoir ouvert sa caisse hors ligne, ou avoir démarré sur un état de
--- démonstration. Refuser la clôture perdrait le comptage réel — le seul
--- chiffre que personne ne peut recalculer après coup.
--- ---------------------------------------------------------------------
-
-create or replace function public.open_cash_session(
-  p_event_id         uuid,
-  p_cash_session_id  uuid,
-  p_site_id          uuid,
-  p_shift_number     integer,
-  p_opening_cash     numeric,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.open_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_session_id uuid; v_existing uuid; v_at timestamptz;
@@ -738,24 +593,10 @@ begin
 end;
 $$;
 
-create or replace function public.close_cash_session(
-  p_event_id         uuid,
-  p_cash_session_id  uuid,
-  p_site_id          uuid,
-  p_shift_number     integer,
-  p_opening_cash     numeric,
-  p_expected         numeric,
-  p_counted_cash     numeric,
-  p_variance         numeric,
-  p_reason           text default null,
-  p_variance_id      uuid default null,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.close_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_expected numeric, p_counted_cash numeric, p_variance numeric, p_reason text DEFAULT NULL::text, p_variance_id uuid DEFAULT NULL::uuid, p_created_at_local timestamp with time zone DEFAULT NULL::timestamp with time zone, p_device_id text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_session_id uuid; v_existing uuid; v_at timestamptz; v_variance numeric;
@@ -842,223 +683,10 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 7. LE RECOUVREMENT D'UN ÉCART
---
--- L'écart est né côté client — d'un comptage, d'une clôture, d'un
--- rendement — et il porte déjà son identifiant. S'il n'est pas encore
--- arrivé en base (son événement d'origine a été refusé, ou la ligne s'est
--- perdue), on le recrée depuis la charge utile : un écart soldé sans
--- écart enregistré serait un motif sans question.
--- ---------------------------------------------------------------------
-
-create or replace function public.resolve_variance(
-  p_event_id         uuid,
-  p_variance_id      uuid,
-  p_site_id          uuid,
-  p_source           text,
-  p_reference_id     uuid,
-  p_subject          text,
-  p_theoretical      numeric,
-  p_declared         numeric,
-  p_delta            numeric,
-  p_amount           numeric,
-  p_resolution       text,
-  p_note             text default null,
-  p_detected_at      timestamptz default null,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
-  v_existing uuid; v_at timestamptz; v_variance public.variances%rowtype;
-begin
-  select entity_id into v_existing from public.domain_events
-    where id = p_event_id and event_type = 'STOCK_VARIANCE_DETECTED';
-  if v_existing is not null then
-    return v_existing;
-  end if;
-
-  select organization_id, post, name into v_org, v_post, v_user_name
-    from public.profiles where id = v_user;
-  if v_org is null then
-    raise exception 'Utilisateur sans organisation';
-  end if;
-
-  if not public.has_capability('RESOLVE_VARIANCE') then
-    raise exception 'Vous n''avez pas l''autorisation de solder un écart.'
-      using errcode = '42501';
-  end if;
-
-  perform set_config('buna.capability', 'RESOLVE_VARIANCE', true);
-
-  if coalesce(trim(p_resolution), '') = '' then
-    raise exception 'RULE-008 : on ne solde pas un écart sans motif';
-  end if;
-
-  v_at := coalesce(p_created_at_local, now());
-
-  insert into public.variances (
-    id, organization_id, site_id, source, reference_id, subject,
-    theoretical, declared, delta, amount,
-    actor_user_id, actor_user_name, actor_post, actor_capability, created_at
-  ) values (
-    p_variance_id, v_org, p_site_id, coalesce(p_source, 'STOCK')::public.variance_source,
-    coalesce(p_reference_id, p_variance_id), coalesce(p_subject, 'Écart'),
-    coalesce(p_theoretical, 0), coalesce(p_declared, 0), coalesce(p_delta, 0),
-    abs(coalesce(p_amount, 0)),
-    v_user, v_user_name, v_post, 'RESOLVE_VARIANCE',
-    coalesce(p_detected_at, v_at)
-  )
-  on conflict (id) do nothing;
-
-  select * into v_variance from public.variances
-   where id = p_variance_id and organization_id = v_org;
-  if v_variance.id is null then
-    raise exception 'Écart introuvable';
-  end if;
-
-  -- Le premier motif fait foi : un écart soldé ne se resolde pas.
-  if v_variance.resolution is null then
-    update public.variances
-       set resolution         = p_resolution::public.variance_resolution,
-           resolution_note    = nullif(trim(coalesce(p_note, '')), ''),
-           resolver_user_id   = v_user,
-           resolver_user_name = v_user_name,
-           resolved_at        = v_at
-     where id = p_variance_id;
-  end if;
-
-  insert into public.domain_events (
-    id, organization_id, site_id, event_type, entity_type, entity_id,
-    actor_user_id, device_id, payload, created_at_local
-  ) values (
-    p_event_id, v_org, p_site_id, 'STOCK_VARIANCE_DETECTED', 'Variance', p_variance_id,
-    v_user, p_device_id,
-    jsonb_build_object('source', p_source, 'delta', p_delta, 'amount', p_amount,
-                       'resolution', p_resolution, 'note', p_note),
-    v_at
-  );
-
-  insert into public.audit_events (
-    organization_id, user_id, user_name, post, action, detail, reference,
-    device_id, capability, created_at
-  ) values (
-    v_org, v_user, v_user_name, v_post,
-    format('Écart soldé — %s', v_variance.subject),
-    format('%s FCFA · %s%s', round(v_variance.amount), p_resolution,
-           case when coalesce(trim(coalesce(p_note, '')), '') = ''
-                then '' else format(' · %s', p_note) end),
-    format('variance:%s', left(p_variance_id::text, 8)),
-    p_device_id, 'RESOLVE_VARIANCE', v_at
-  );
-
-  return p_variance_id;
-end;
-$$;
-
--- ---------------------------------------------------------------------
--- 8. L'ENCAISSEMENT
---
--- Il n'existe pas de table des paiements : le moyen et le montant vivent
--- sur la vente. Cette fonction ne duplique donc rien — elle vérifie que
--- l'encaissement correspond bien à une vente enregistrée, et journalise
--- le fait de manière idempotente.
---
--- Vente pas encore arrivée : l'erreur est volontairement RÉESSAYABLE
--- (classe 40, « recommencez »). Un refus définitif ferait sortir
--- l'encaissement de la file pendant que sa vente, elle, serait renvoyée
--- avec succès — la caisse afficherait alors une vente sans encaissement.
--- ---------------------------------------------------------------------
-
-create or replace function public.record_payment(
-  p_event_id         uuid,
-  p_sale_id          uuid,
-  p_site_id          uuid,
-  p_payment_method   text,
-  p_amount           numeric,
-  p_created_at_local timestamptz default null,
-  p_device_id        text default null
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
-  v_existing uuid; v_at timestamptz; v_sale public.sales%rowtype;
-begin
-  select entity_id into v_existing from public.domain_events
-    where id = p_event_id and event_type = 'PAYMENT_RECEIVED';
-  if v_existing is not null then
-    return v_existing;
-  end if;
-
-  select organization_id, post, name into v_org, v_post, v_user_name
-    from public.profiles where id = v_user;
-  if v_org is null then
-    raise exception 'Utilisateur sans organisation';
-  end if;
-
-  if not public.has_capability('SELL') then
-    raise exception 'Vous n''avez pas l''autorisation d''encaisser une vente.'
-      using errcode = '42501';
-  end if;
-
-  perform set_config('buna.capability', 'SELL', true);
-
-  select * into v_sale from public.sales where id = p_sale_id and organization_id = v_org;
-  if v_sale.id is null then
-    raise exception 'La vente de cet encaissement n''est pas encore enregistrée.'
-      using errcode = '40001';
-  end if;
-
-  v_at := coalesce(p_created_at_local, now());
-
-  insert into public.domain_events (
-    id, organization_id, site_id, event_type, entity_type, entity_id,
-    actor_user_id, device_id, payload, created_at_local
-  ) values (
-    p_event_id, v_org, coalesce(p_site_id, v_sale.site_id), 'PAYMENT_RECEIVED', 'Sale',
-    p_sale_id, v_user, p_device_id,
-    jsonb_build_object('paymentMethod', p_payment_method, 'amount', p_amount),
-    v_at
-  );
-
-  return p_sale_id;
-end;
-$$;
-
--- ---------------------------------------------------------------------
--- 9. LA DÉLÉGATION
---
--- Jusqu'ici, accorder un accès ne touchait que le réducteur local : le
--- droit disparaissait au rechargement, puisque le profil relit ses
--- capacités depuis `user_capabilities`. Ces deux fonctions écrivent le
--- fait en base.
---
--- Aucune ne prend de `p_event_id` : la délégation n'a pas de type
--- d'événement, elle ne passe donc pas par la file. L'idempotence tient
--- ici à la donnée elle-même — l'index unique partiel interdit deux
--- accords actifs identiques, et révoquer ce qui est déjà révoqué ne
--- touche aucune ligne.
---
--- Révoquer ne supprime pas : ça date la fin. Sinon « qui avait le droit
--- le 12 août ? » redevient insoluble.
--- ---------------------------------------------------------------------
-
-create or replace function public.grant_capability(
-  p_user_id    uuid,
-  p_capability text
-) returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.grant_capability(p_user_id uuid, p_capability text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_target_org uuid; v_target_name text; v_cap public.capability; v_id uuid;
@@ -1109,14 +737,10 @@ begin
 end;
 $$;
 
-create or replace function public.revoke_capability(
-  p_user_id    uuid,
-  p_capability text
-) returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
+CREATE FUNCTION public.revoke_capability(p_user_id uuid, p_capability text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_org uuid; v_user uuid := auth.uid(); v_post public.user_post; v_user_name text;
   v_target_org uuid; v_target_name text; v_cap public.capability; v_touched int;
@@ -1167,32 +791,42 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------
--- 10. PRIVILÈGES
---
--- Postgres accorde EXECUTE à PUBLIC par défaut : un `revoke ... from anon`
--- seul ne fait rien. On révoque de `public`, puis on accorde nommément.
--- Les signatures sont lues dans le catalogue — une signature devinée
--- produit un revoke qui échoue, ou pire, qui porte à côté et laisse la
--- vraie fonction ouverte.
--- ---------------------------------------------------------------------
 
-do $$
-declare r record;
-begin
-  for r in
-    select p.oid::regprocedure as sig
-    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname in (
-        'record_waste','transfer_stock','complete_batch','apply_inventory_count',
-        'record_expense','open_cash_session','close_cash_session','resolve_variance',
-        'record_payment','grant_capability','revoke_capability'
-      )
-  loop
-    execute format('revoke execute on function %s from public', r.sig);
-    execute format('grant execute on function %s to authenticated', r.sig);
-  end loop;
-end $$;
+-- Privilèges : `execute` retiré à PUBLIC, accordé explicitement.
 
-commit;
+REVOKE ALL ON FUNCTION public.apply_inventory_count(p_event_id uuid, p_count_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_unit text, p_theoretical numeric, p_counted numeric, p_delta numeric, p_reason text, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.apply_inventory_count(p_event_id uuid, p_count_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_unit text, p_theoretical numeric, p_counted numeric, p_delta numeric, p_reason text, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.apply_inventory_count(p_event_id uuid, p_count_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_unit text, p_theoretical numeric, p_counted numeric, p_delta numeric, p_reason text, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.apply_inventory_count(p_event_id uuid, p_count_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_unit text, p_theoretical numeric, p_counted numeric, p_delta numeric, p_reason text, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.close_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_expected numeric, p_counted_cash numeric, p_variance numeric, p_reason text, p_variance_id uuid, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.close_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_expected numeric, p_counted_cash numeric, p_variance numeric, p_reason text, p_variance_id uuid, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.close_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_expected numeric, p_counted_cash numeric, p_variance numeric, p_reason text, p_variance_id uuid, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.close_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_expected numeric, p_counted_cash numeric, p_variance numeric, p_reason text, p_variance_id uuid, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.complete_batch(p_event_id uuid, p_batch_id uuid, p_site_id uuid, p_code text, p_item_id uuid, p_recipe_version_id uuid, p_location_id uuid, p_planned numeric, p_produced numeric, p_loss numeric, p_consumption jsonb, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.complete_batch(p_event_id uuid, p_batch_id uuid, p_site_id uuid, p_code text, p_item_id uuid, p_recipe_version_id uuid, p_location_id uuid, p_planned numeric, p_produced numeric, p_loss numeric, p_consumption jsonb, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.complete_batch(p_event_id uuid, p_batch_id uuid, p_site_id uuid, p_code text, p_item_id uuid, p_recipe_version_id uuid, p_location_id uuid, p_planned numeric, p_produced numeric, p_loss numeric, p_consumption jsonb, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.complete_batch(p_event_id uuid, p_batch_id uuid, p_site_id uuid, p_code text, p_item_id uuid, p_recipe_version_id uuid, p_location_id uuid, p_planned numeric, p_produced numeric, p_loss numeric, p_consumption jsonb, p_variance_id uuid, p_variance_amount numeric, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.grant_capability(p_user_id uuid, p_capability text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.grant_capability(p_user_id uuid, p_capability text) TO anon;
+GRANT ALL ON FUNCTION public.grant_capability(p_user_id uuid, p_capability text) TO authenticated;
+GRANT ALL ON FUNCTION public.grant_capability(p_user_id uuid, p_capability text) TO service_role;
+REVOKE ALL ON FUNCTION public.open_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.open_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.open_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.open_cash_session(p_event_id uuid, p_cash_session_id uuid, p_site_id uuid, p_shift_number integer, p_opening_cash numeric, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.record_expense(p_event_id uuid, p_expense_id uuid, p_site_id uuid, p_amount numeric, p_category text, p_description text, p_supplier_id uuid, p_payment_method text, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_expense(p_event_id uuid, p_expense_id uuid, p_site_id uuid, p_amount numeric, p_category text, p_description text, p_supplier_id uuid, p_payment_method text, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.record_expense(p_event_id uuid, p_expense_id uuid, p_site_id uuid, p_amount numeric, p_category text, p_description text, p_supplier_id uuid, p_payment_method text, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.record_expense(p_event_id uuid, p_expense_id uuid, p_site_id uuid, p_amount numeric, p_category text, p_description text, p_supplier_id uuid, p_payment_method text, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.record_waste(p_event_id uuid, p_waste_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_quantity numeric, p_unit text, p_cost numeric, p_reason text, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_waste(p_event_id uuid, p_waste_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_quantity numeric, p_unit text, p_cost numeric, p_reason text, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.record_waste(p_event_id uuid, p_waste_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_quantity numeric, p_unit text, p_cost numeric, p_reason text, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.record_waste(p_event_id uuid, p_waste_id uuid, p_site_id uuid, p_location_id uuid, p_item_id uuid, p_quantity numeric, p_unit text, p_cost numeric, p_reason text, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;
+REVOKE ALL ON FUNCTION public.revoke_capability(p_user_id uuid, p_capability text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.revoke_capability(p_user_id uuid, p_capability text) TO anon;
+GRANT ALL ON FUNCTION public.revoke_capability(p_user_id uuid, p_capability text) TO authenticated;
+GRANT ALL ON FUNCTION public.revoke_capability(p_user_id uuid, p_capability text) TO service_role;
+REVOKE ALL ON FUNCTION public.transfer_stock(p_event_id uuid, p_transfer_id uuid, p_site_id uuid, p_item_id uuid, p_from_location_id uuid, p_to_location_id uuid, p_quantity numeric, p_unit text, p_created_at_local timestamp with time zone, p_device_id text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.transfer_stock(p_event_id uuid, p_transfer_id uuid, p_site_id uuid, p_item_id uuid, p_from_location_id uuid, p_to_location_id uuid, p_quantity numeric, p_unit text, p_created_at_local timestamp with time zone, p_device_id text) TO anon;
+GRANT ALL ON FUNCTION public.transfer_stock(p_event_id uuid, p_transfer_id uuid, p_site_id uuid, p_item_id uuid, p_from_location_id uuid, p_to_location_id uuid, p_quantity numeric, p_unit text, p_created_at_local timestamp with time zone, p_device_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.transfer_stock(p_event_id uuid, p_transfer_id uuid, p_site_id uuid, p_item_id uuid, p_from_location_id uuid, p_to_location_id uuid, p_quantity numeric, p_unit text, p_created_at_local timestamp with time zone, p_device_id text) TO service_role;

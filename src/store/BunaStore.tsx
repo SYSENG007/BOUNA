@@ -8,6 +8,7 @@ import type {
   WasteEvent, WasteReason, Unit, EventType, StockLocation, Recipe, RecipeVersion,
 } from '../domain/types';
 
+import { isMadeToOrder } from '../domain/types';
 import { deviceId, uuid, batchCode } from '../domain/ids';
 import type { Capability, CapabilityGrant } from '../domain/capabilities';
 import { CAPABILITY_LABEL, effectiveCapabilities } from '../domain/capabilities';
@@ -23,7 +24,9 @@ import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '..
 import { supabaseTransport } from '../backend/transport';
 import { crossCheckStock, fetchSnapshot, type Snapshot } from '../backend/hydrate';
 import { evaluateRules, type Cooldowns } from '../domain/rules';
+import { businessDateOf } from '../domain/closing';
 import { loadState, saveState } from './persist';
+import { loadOutbox, mergeOutbox, mirrorOutbox } from './outbox-store';
 import {
   applyReferentials, aliasEntries, resolveId, signature,
   LOC, LOCATIONS, RECIPES, RECIPE_VERSIONS, SITE, SUPPLIERS, USERS,
@@ -32,6 +35,9 @@ import {
   ITEMS, SEED_AUDIT, SEED_CASH_SESSION, SEED_EXPENSES, SEED_GRANTS, SEED_MOVEMENTS,
   SEED_NOTIFICATIONS, SEED_PURCHASES,
 } from '../domain/seed';
+
+/** Les listes calculées dont on peut écarter une ligne pour la journée. */
+export type DismissList = 'APPRO' | 'PRODUCTION';
 
 /* ------------------------------------------------------------------ État */
 
@@ -56,6 +62,16 @@ interface State {
   grants: CapabilityGrant[];
   /** Écarts constatés, soldés ou non. Un écart ouvert remonte au tableau de bord. */
   variances: Variance[];
+  /**
+   * Lignes écartées d'une liste calculée, par jour ouvré.
+   *
+   * Clé « LISTE:articleId », valeur : la date ouvrée du geste. La liste de
+   * courses et le besoin de production sont des PROJECTIONS (RULE-002) : il n'y
+   * a rien à y supprimer. On peut seulement dire « pas aujourd'hui », et la
+   * portée au jour est ce qui empêche de faire taire définitivement une
+   * rupture de stock — demain, la question revient d'elle-même.
+   */
+  dismissals: Record<string, string>;
 }
 
 export const initialState: State = {
@@ -71,11 +87,12 @@ export const initialState: State = {
   cashSession: SEED_CASH_SESSION,
   notifications: SEED_NOTIFICATIONS,
   audit: SEED_AUDIT,
-  saleCounter: 453,
-  batchCounter: 4,
+  saleCounter: 0,
+  batchCounter: 0,
   cooldowns: {},
   grants: SEED_GRANTS,
   variances: [],
+  dismissals: {},
 };
 
 export type Action =
@@ -108,7 +125,10 @@ export type Action =
   | { type: 'RAISE'; notifications: Notification[]; cooldowns: Cooldowns }
   | { type: 'GRANT'; grants: CapabilityGrant[] }
   | { type: 'REVOKE'; userId: UUID; capabilities: Capability[]; by: Actor }
-  | { type: 'RESOLVE_VARIANCE'; varianceId: UUID; resolution: Resolution; note?: string; by: Actor };
+  | { type: 'RESOLVE_VARIANCE'; varianceId: UUID; resolution: Resolution; note?: string; by: Actor }
+  | { type: 'DISMISS'; key: string; day: string }
+  | { type: 'RESTORE_LIST'; prefix: string }
+  | { type: 'RECOVER_OUTBOX'; events: DomainEvent[] };
 
 export function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -154,6 +174,23 @@ export function reducer(state: State, action: Action): State {
         saleCounter: s.saleCounter,
         batchCounter: Math.max(state.batchCounter, s.batches.length),
       };
+    }
+
+    case 'RECOVER_OUTBOX': {
+      // Le cache fait foi sur ce qu'il connaît : il porte le `syncStatus` le
+      // plus récent. Le miroir n'ajoute que ce qui avait disparu.
+      const events = mergeOutbox(state.events, action.events);
+      return events.length === state.events.length ? state : { ...state, events };
+    }
+
+    case 'DISMISS':
+      return { ...state, dismissals: { ...state.dismissals, [action.key]: action.day } };
+
+    case 'RESTORE_LIST': {
+      const kept = Object.fromEntries(
+        Object.entries(state.dismissals).filter(([k]) => !k.startsWith(action.prefix)),
+      );
+      return { ...state, dismissals: kept };
     }
 
     case 'LOGIN':
@@ -337,6 +374,16 @@ interface Ctx {
     transportCost: number;
     paymentMethod: PaymentMethod;
   }) => void;
+  /** Écarte une ligne d'une liste calculée, pour la journée en cours. */
+  dismissFromList: (list: DismissList, itemId: UUID) => void;
+  /** Les articles écartés aujourd'hui de cette liste. */
+  dismissedIn: (list: DismissList) => Set<UUID>;
+  /** Ramène tout ce qui a été écarté de cette liste. */
+  restoreList: (list: DismissList) => void;
+  /** Faux quand la file ne peut plus être persistée durablement sur cet appareil. */
+  outboxDurable: boolean;
+  /** Ouvre un shift avec le fond de caisse compté. Sans lui, rien à clôturer. */
+  openCashSession: (openingCash: number) => void;
   closeCashSession: (countedCash: number, reason?: string) => void;
   setNotificationStatus: (id: UUID, status: Notification['status']) => void;
   stockOf: (itemId: UUID, locationId?: UUID) => number;
@@ -380,6 +427,10 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const [authLoading, setAuthLoading] = useState(isBackendConfigured);
   const [hydrating, setHydrating] = useState(false);
   const [hydratedAt, setHydratedAt] = useState<string | null>(null);
+  /* Faux quand le miroir de la file a refusé d'écrire : à signaler, pas à taire. */
+  const [outboxDurable, setOutboxDurable] = useState(true);
+  /* Vrai une fois le miroir relu : rien ne s'écrit avant, sous peine de l'effacer. */
+  const [recovered, setRecovered] = useState(false);
   /*
    * Signature des référentiels. Elle sert de clé de remontage : plusieurs
    * écrans figent un emplacement dans un `useState` au premier rendu, et ces
@@ -400,6 +451,57 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  /*
+   * La file, en plus, dans un magasin qui ne s'évince pas.
+   *
+   * `saveState` peut échouer sur le quota et l'avale volontairement : perdre
+   * du cache est sans conséquence, il revient à l'hydratation. Mais une vente
+   * encaissée hors ligne n'existe QUE dans la file — personne ne peut la
+   * reconstruire. Elle est donc écrite une seconde fois en IndexedDB, dont la
+   * limite est bien plus haute et que le nettoyage du cache ne balaie pas.
+   *
+   * L'écriture ne bloque rien : la vente est déjà dans l'état React et à
+   * l'écran quand elle part (RULE-010).
+   */
+  useEffect(() => {
+    /*
+     * Rien n'est écrit tant que la récupération n'a pas eu lieu.
+     *
+     * Sans cette garde, le premier rendu suivant un cache vidé miroitait un
+     * `state.events` vide, ce qui EFFAÇAIT le magasin — juste avant que la
+     * lecture asynchrone ne vienne y chercher les ventes à récupérer. Le
+     * miroir se détruisait lui-même dans le seul cas où il servait à quelque
+     * chose.
+     */
+    if (!recovered) return;
+    void mirrorOutbox(state.events).catch((cause) => {
+      console.warn('[BUNA] file non persistée sur cet appareil', cause);
+      setOutboxDurable(false);
+    });
+  }, [state.events, recovered]);
+
+  /*
+   * Récupération au démarrage : ce que le cache a perdu, le miroir le rend.
+   *
+   * Le cas visé est précis — quota atteint, `localStorage` vidé par le
+   * navigateur, ou onglet fermé avant l'écriture du cache. Sans ça, la file
+   * repartait vide et les ventes hors ligne disparaissaient au rechargement.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void loadOutbox()
+      .then((mirrored) => {
+        if (cancelled) return;
+        if (mirrored.length) dispatch({ type: 'RECOVER_OUTBOX', events: mirrored });
+      })
+      .finally(() => {
+        // Même en cas d'échec : sans ce déverrouillage, plus rien ne serait
+        // jamais persisté, ce qui est pire que le problème d'origine.
+        if (!cancelled) setRecovered(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const up = () => setOnline(true);
@@ -610,12 +712,19 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         /* On ne déduit plus d'un LOC.POS supposé : la production livre au
            frigo, et le comptoir plongeait en négatif pendant que la
            marchandise attendait à côté. */
-        movements: lines.map((l) =>
-          makeMovement(
-            l.itemId, sourceFor(l.itemId, l.quantity, LOC.POS), -l.quantity,
-            'unite', 'SALE', 'Sale', saleId, actor,
+        /* Seuls les produits préparés d'avance sortent du stock. Un produit
+           monté à la commande n'a pas de stock de produit fini à débiter — le
+           débiter ferait plonger un compteur qui n'a jamais rien compté. Ce
+           sont ses ingrédients qui devront sortir, quand les recettes seront
+           définies. */
+        movements: lines
+          .filter((l) => !isMadeToOrder(itemsMap.get(l.itemId) ?? {}))
+          .map((l) =>
+            makeMovement(
+              l.itemId, sourceFor(l.itemId, l.quantity, LOC.POS), -l.quantity,
+              'unite', 'SALE', 'Sale', saleId, actor,
+            ),
           ),
-        ),
         events: [
           /*
            * Le payload porte TOUT ce dont `complete_sale` a besoin. Il ne
@@ -718,7 +827,17 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         bumpBatch: true,
         movements: [...consumption, output],
         events: [
-          makeEvent('BATCH_COMPLETED', 'ProductionBatch', id, { planned, produced, loss, yieldPct }),
+          /* Le lot ne se reconstruit pas côté serveur à partir d'un rendement :
+             il lui faut sa recette, son emplacement et ce qu'il a consommé,
+             sinon `complete_batch` ne peut ni écrire le lot ni sortir les
+             ingrédients. */
+          makeEvent('BATCH_COMPLETED', 'ProductionBatch', id, {
+            batchId: id, code, itemId, recipeVersionId, locationId,
+            planned, produced, loss, yieldPct,
+            consumption: consumption.map((m) => ({
+              itemId: m.itemId, quantity: m.quantity, unit: m.unit,
+            })),
+          }),
         ],
         audit: [makeAudit(actor, `Batch ${code}`, `${produced}/${planned} unités · rendement ${yieldPct} %`, `batch:${code}`)],
         /*
@@ -763,7 +882,12 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           userId: actor.userId, createdAt: actor.at, actor,
         },
         movements: [makeMovement(itemId, locationId, -quantity, item.unit, 'WASTE', 'WasteEvent', id, actor)],
-        events: [makeEvent('WASTE_RECORDED', 'WasteEvent', id, { itemId, quantity, cost, reason })],
+        /* `locationId` et `unit` voyagent avec le fait : les deux colonnes sont
+           NOT NULL côté serveur, et un payload qui les omet fait échouer
+           l'insertion — donc perd la perte. */
+        events: [makeEvent('WASTE_RECORDED', 'WasteEvent', id, {
+          itemId, locationId, quantity, unit: item.unit, cost, reason,
+        })],
         audit: [makeAudit(actor, `Perte déclarée — ${item.name}`, `${quantity} ${item.unit} · motif : ${reason} · ${Math.round(cost)} FCFA`)],
       });
     },
@@ -783,7 +907,11 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           makeMovement(itemId, from, -quantity, item.unit, 'TRANSFER_OUT', 'Transfer', transferId, actor),
           makeMovement(itemId, to, quantity, item.unit, 'TRANSFER_IN', 'Transfer', transferId, actor),
         ],
-        events: [makeEvent('STOCK_TRANSFERRED', 'Transfer', transferId, { itemId, from, to, quantity })],
+        /* `unit` est NOT NULL sur `stock_movements` : sans elle, les deux
+           mouvements du transfert n'arrivent jamais en base. */
+        events: [makeEvent('STOCK_TRANSFERRED', 'Transfer', transferId, {
+          itemId, from, to, quantity, unit: item.unit,
+        })],
         audit: [makeAudit(actor, `Transfert — ${item.name}`, `${quantity} ${item.unit}`)],
       });
     },
@@ -798,7 +926,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'COMMIT',
         expense: { ...input, id, userId: actor.userId, createdAt: actor.at, actor },
-        events: [makeEvent('EXPENSE_RECORDED', 'Expense', id, input)],
+        events: [makeEvent('EXPENSE_RECORDED', 'Expense', id, { ...input, expenseId: id })],
         audit: [makeAudit(actor, `Dépense — ${input.description}`, `${input.amount} FCFA · ${input.category}`)],
       });
     },
@@ -891,7 +1019,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
         events: [
           makeEvent('STOCK_COUNTED', 'InventoryCount', countId, {
-            itemId, locationId, theoretical, counted: countedQuantity, delta, reason,
+            countId, itemId, locationId, unit: item.unit,
+            theoretical, counted: countedQuantity, delta, reason,
           }),
         ],
         audit: [
@@ -1015,6 +1144,91 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     [itemsMap, stock, authorize, makeEvent, makeMovement, makeAudit],
   );
 
+  /*
+   * Écarter, pas supprimer.
+   *
+   * Ces listes sont recalculées à chaque rendu : rien à y effacer. Écarter dit
+   * « pas aujourd'hui », et la clé porte la date ouvrée — demain la ligne
+   * revient. C'est délibéré : une rupture de stock qu'on peut faire taire pour
+   * toujours finit par coûter un service.
+   */
+  const dismissFromList = useCallback<Ctx['dismissFromList']>(
+    (list, itemId) => {
+      dispatch({
+        type: 'DISMISS',
+        key: `${list}:${itemId}`,
+        day: businessDateOf(new Date().toISOString()),
+      });
+    },
+    [],
+  );
+
+  const dismissedIn = useCallback<Ctx['dismissedIn']>(
+    (list) => {
+      const today = businessDateOf(new Date().toISOString());
+      const prefix = `${list}:`;
+      const out = new Set<UUID>();
+      for (const [key, day] of Object.entries(state.dismissals)) {
+        if (day === today && key.startsWith(prefix)) out.add(key.slice(prefix.length));
+      }
+      return out;
+    },
+    [state.dismissals],
+  );
+
+  const restoreList = useCallback<Ctx['restoreList']>(
+    (list) => dispatch({ type: 'RESTORE_LIST', prefix: `${list}:` }),
+    [],
+  );
+
+  /**
+   * Ouverture de shift.
+   *
+   * Le fond de caisse est DÉCLARÉ, pas repris de la clôture précédente : entre
+   * deux shifts, l'argent dort ailleurs et quelqu'un en remet dans le tiroir.
+   * Reconduire l'ancien solde ferait porter au vendeur du matin un écart créé
+   * la veille, ce qui est exactement ce qu'on cherche à éviter.
+   */
+  const openCashSession = useCallback<Ctx['openCashSession']>(
+    (openingCash) => {
+      const actor = authorize('MANAGE_CASH_SESSION');
+      if (!actor) return;
+      // Une caisse déjà ouverte ne se rouvre pas : on clôture d'abord.
+      if (!state.cashSession.closedAt) return;
+
+      const id = uuid();
+      const shiftNumber = state.cashSession.shiftNumber + 1;
+      const session: CashSession = {
+        id,
+        siteId,
+        sellerId: actor.userId,
+        shiftNumber,
+        openingCash,
+        countedCash: null,
+        openedAt: actor.at,
+        closedAt: null,
+      };
+
+      dispatch({
+        type: 'COMMIT',
+        cashSession: session,
+        events: [
+          makeEvent('CASH_SESSION_OPENED', 'CashSession', id, {
+            cashSessionId: id, shiftNumber, openingCash,
+          }),
+        ],
+        audit: [
+          makeAudit(
+            actor,
+            `Ouverture shift #${shiftNumber}`,
+            `fond de caisse ${Math.round(openingCash)} FCFA`,
+          ),
+        ],
+      });
+    },
+    [state.cashSession, siteId, authorize, makeEvent, makeAudit],
+  );
+
   const closeCashSession = useCallback<Ctx['closeCashSession']>(
     (countedCash, reason) => {
       const actor = authorize('MANAGE_CASH_SESSION');
@@ -1030,7 +1244,10 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         type: 'COMMIT',
         cashSession: session,
         events: [
-          makeEvent('CASH_SESSION_CLOSED', 'CashSession', session.id, { expected, countedCash, variance, reason }),
+          makeEvent('CASH_SESSION_CLOSED', 'CashSession', session.id, {
+            cashSessionId: session.id, shiftNumber: session.shiftNumber,
+            openingCash: session.openingCash, expected, countedCash, variance, reason,
+          }),
         ],
         audit: [
           makeAudit(
@@ -1339,7 +1556,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     hydratedAt,
     refresh,
     syncNow, completeSale, voidSale, completeBatch, recordWaste, transferStock,
-    recordExpense, receiveGoods, closeCashSession, setNotificationStatus, stockOf,
+    recordExpense, receiveGoods, openCashSession, closeCashSession, setNotificationStatus, stockOf,
+    dismissFromList, dismissedIn, restoreList, outboxDurable,
     saveItem, archiveItem, adjustStock, saveLocation, saveRecipe,
   };
 

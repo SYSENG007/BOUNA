@@ -1,21 +1,29 @@
 import { useNavigate } from 'react-router-dom';
 import { useBuna, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
+import { isMadeToOrder } from '../../../domain/types';
 import { feasibleUnits as feasible } from '../../../domain/production';
 import { stockHealth } from '../../../domain/stock';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { ActionRow, HEALTH_TONE } from '../../../design-system/components/patterns';
 import { Badge, Button, Card, SectionLabel } from '../../../design-system/components/primitives';
+import { IconClose } from '../../../design-system/icons';
 
 /**
  * Production du jour — « ce qui reste à produire, et les matières qui vont
  * manquer avant la fin du service ». Le besoin est calculé, pas saisi.
  */
 export function Production() {
-  const { state, items, stockOf } = useBuna();
+  const { state, items, stockOf, dismissFromList, dismissedIn, restoreList } = useBuna();
   const navigate = useNavigate();
 
-  const finished = state.items.filter((i) => i.kind === 'FINISHED' && i.targetStock);
+  const dismissed = dismissedIn('PRODUCTION');
+  /* Ce qu'il y a à préparer, c'est ce qui se prépare D'AVANCE. Une boisson
+     montée à la commande n'a rien à faire dans une liste de production : elle
+     se prépare quand le client la demande, pas le matin. */
+  const finished = state.items.filter(
+    (i) => i.kind === 'FINISHED' && !isMadeToOrder(i) && i.targetStock && !dismissed.has(i.id),
+  );
 
   /* Même calcul que l'écran de déclaration : une seule source de vérité. */
   const feasibleUnits = (recipeVersionId: string) => {
@@ -55,8 +63,20 @@ export function Production() {
           const feasible = recipe ? feasibleUnits(recipe.id) : null;
 
           return (
-            <Card key={product.id} className="flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
+            <Card key={product.id} className="relative flex flex-col gap-3">
+              {/* Écarter pour aujourd'hui : le besoin est calculé, pas saisi —
+                  il n'y a rien à supprimer, seulement à remettre à demain. */}
+              <button
+                type="button"
+                onClick={() => dismissFromList('PRODUCTION', product.id)}
+                title={`Écarter ${product.name} de la production du jour`}
+                aria-label={`Écarter ${product.name} de la production du jour`}
+                className="group absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-[6px] text-ink-400 transition-colors hover:bg-critique-pale hover:text-critique"
+              >
+                <IconClose size={16} className="transition-transform duration-150 motion-safe:group-hover:rotate-90" />
+              </button>
+
+              <div className="flex items-start justify-between gap-3 pr-10">
                 <div className="min-w-0">
                   <div className="text-[16px] font-medium text-ink-900">{product.name}</div>
                   <div className="num mt-0.5 text-[12px] text-ink-500">
@@ -101,6 +121,16 @@ export function Production() {
             </Card>
           );
         })}
+
+        {dismissed.size > 0 && (
+          <button
+            type="button"
+            onClick={() => restoreList('PRODUCTION')}
+            className="w-full rounded-[6px] border border-ink-200 bg-surface px-3 py-2.5 text-[13px] text-ink-600 transition-colors hover:border-ink-300 hover:text-cafe"
+          >
+            {dismissed.size} produit{dismissed.size > 1 ? 's' : ''} écarté{dismissed.size > 1 ? 's' : ''} aujourd'hui · tout remettre
+          </button>
+        )}
 
         {criticalItems.length > 0 && (
           <>

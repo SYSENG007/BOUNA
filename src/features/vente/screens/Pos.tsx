@@ -4,11 +4,11 @@ import { useBuna } from '../../../store/BunaStore';
 import { useCart } from '../CartContext';
 import { fcfa, fcfaFull } from '../../../domain/money';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
-import { BunaLogo } from '../../../design-system/components/BunaLogo';
 import { ProductImage } from '../../../design-system/components/ProductImage';
 import { Button } from '../../../design-system/components/primitives';
-import { IconCart } from '../../../design-system/icons';
+import { IconCart, IconClose } from '../../../design-system/icons';
 import { ErrorBoundary } from '../../../shell/ErrorBoundary';
+import { isMadeToOrder } from '../../../domain/types';
 import type { Item, UUID } from '../../../domain/types';
 
 /**
@@ -17,11 +17,23 @@ import type { Item, UUID } from '../../../domain/types';
  * Objectif PRD : vente standard en moins de 10 s, 3 à 5 interactions.
  */
 export function Pos() {
-  const { state, user, stockOf } = useBuna();
+  const { state, user, stockOf, can } = useBuna();
   const { cart, add, remove, count, total } = useCart();
   const navigate = useNavigate();
 
   const openedAt = new Date(state.cashSession.openedAt);
+  const cashOpen = !state.cashSession.closedAt;
+
+  /*
+   * Pas de vente sans caisse ouverte.
+   *
+   * L'écart de caisse se mesure entre un fond déclaré à l'ouverture et un
+   * comptage à la clôture. Encaisser hors shift produit des ventes que rien ne
+   * rattache à un tiroir : à la clôture, l'attendu ne veut plus rien dire et
+   * l'écart n'est plus imputable à personne. Mieux vaut bloquer trente secondes
+   * que de rendre la journée irréconciliable.
+   */
+  if (!cashOpen) return <CaisseFermee canOpen={can('MANAGE_CASH_SESSION')} />;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
@@ -37,7 +49,24 @@ export function Pos() {
             {openedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · Coffee Bar Auchan
           </p>
         </div>
-        <BunaLogo size={42} />
+
+        {/*
+          La seule sortie du mode boutique, et elle est explicite.
+          Pendant un service, la navigation est masquée pour qu'on ne la quitte
+          pas par erreur entre deux clients : il faut donc un geste nommé pour
+          en sortir, et son libellé dit exactement ce qu'il fait.
+        */}
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="group flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-[6px] border border-ink-200 bg-surface px-3 text-[12.5px] font-medium text-ink-600 transition-colors hover:border-ink-300 hover:text-cafe"
+        >
+          <IconClose
+            size={15}
+            className="transition-transform duration-150 motion-safe:group-hover:rotate-90"
+          />
+          Sortir de la boutique
+        </button>
       </header>
 
       <main className="flex-1 px-3 pb-40">
@@ -88,6 +117,45 @@ export function Pos() {
   );
 }
 
+/**
+ * Caisse fermée — l'écran de vente refuse d'ouvrir.
+ *
+ * Le message nomme la cause et l'action, dans cet ordre. Il ne dit pas
+ * « erreur » : rien n'est cassé, il manque simplement un geste, et ce geste
+ * n'appartient pas forcément à la personne qui lit.
+ */
+function CaisseFermee({ canOpen }: { canOpen: boolean }) {
+  const navigate = useNavigate();
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col bg-ivoire">
+      <SyncIndicator />
+
+      <div className="flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md space-y-4 text-center">
+          <h1 className="font-display text-[24px] leading-tight text-cafe">
+            La caisse est fermée
+          </h1>
+          <p className="text-[14px] leading-relaxed text-ink-600">
+            {canOpen
+              ? "Comptez le fond de caisse et ouvrez le shift : c'est lui qui sert de référence à l'écart, au moment de clôturer."
+              : "Un responsable doit ouvrir la caisse avant la première vente. Sans shift ouvert, l'argent encaissé ne pourrait être rattaché à aucun tiroir."}
+          </p>
+
+          <div className="flex flex-col gap-2.5 pt-2">
+            {canOpen && (
+              <Button variant="primary" size="counter" full onClick={() => navigate('/finance/caisse')}>
+                Ouvrir la caisse
+              </Button>
+            )}
+            <Button full onClick={() => navigate('/')}>Sortir de la boutique</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductGrid({
   items, cart, stockOf, onAdd, onRemove,
 }: {
@@ -107,7 +175,11 @@ function ProductGrid({
            qui a été rangé au comptoir. Lire LOC.POS seul affichait « rupture »
            sur un produit dont il restait vingt unités au frigo. */
         const available = stockOf(p.id);
-        const out = available <= 0;
+        /* Un produit monté à la commande n'a pas de stock de produit fini :
+           le déclarer en rupture parce qu'il vaut zéro rendrait la carte
+           invendable en permanence. Sa disponibilité tient aux ingrédients. */
+        const toOrder = isMadeToOrder(p);
+        const out = !toOrder && available <= 0;
         return (
           <div
             key={p.id}
@@ -134,7 +206,7 @@ function ProductGrid({
               <div>
                 <div className="t-figure text-[19px] text-cafe">{fcfa(p.price ?? 0)}</div>
                 <div className="text-[11px] text-ink-500">
-                  {out ? 'Rupture' : `${Math.floor(available)} dispo`}
+                  {toOrder ? 'À la commande' : out ? 'Rupture' : `${Math.floor(available)} dispo`}
                 </div>
               </div>
 

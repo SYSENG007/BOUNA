@@ -66,3 +66,48 @@ describe('routage', () => {
     expect(orphans).toEqual([]);
   });
 });
+
+/**
+ * Un onglet doit toujours mener quelque part.
+ *
+ * `homeRequires` décide de la VISIBILITÉ d'une feature ; la garde de sa route
+ * décide de son ACCÈS. Quand les deux divergent, l'application affiche une
+ * destination qu'elle refuse ensuite d'ouvrir : Maty, responsable finance,
+ * voyait l'onglet « Vendre » parce qu'elle peut lire les ventes, et tombait
+ * sur un comptoir interdit. Quatre features avaient ce défaut.
+ *
+ * La règle : toute capacité qui rend une feature visible doit suffire à ouvrir
+ * son accueil.
+ */
+const guardsByRoute = (() => {
+  const app = Object.entries(SOURCES).find(([path]) => path.endsWith('/App.tsx'))?.[1] ?? '';
+  const out = new Map<string, string[]>();
+  for (const m of app.matchAll(/<Route path="([^"]+)" element={guard\(\[([^\]]*)\]/g)) {
+    out.set(m[1], [...m[2].matchAll(/'([A-Z_]+)'/g)].map((c) => c[1]));
+  }
+  return out;
+})();
+
+describe('cohérence navigation / gardes', () => {
+  it('garde au moins une route gardée par feature', () => {
+    expect(guardsByRoute.size).toBeGreaterThan(15);
+  });
+
+  it("n'affiche jamais une feature dont l'accueil serait refusé", () => {
+    const fautes: string[] = [];
+
+    for (const feature of FEATURES) {
+      const guard = guardsByRoute.get(feature.home);
+      if (!guard) continue; // accueil non gardé : rien à vérifier
+      for (const capability of feature.homeRequires) {
+        if (!guard.includes(capability)) {
+          fautes.push(
+            `${feature.id} : « ${capability} » fait apparaître l'onglet mais n'ouvre pas ${feature.home} (garde : ${guard.join(', ')})`,
+          );
+        }
+      }
+    }
+
+    expect(fautes).toEqual([]);
+  });
+});

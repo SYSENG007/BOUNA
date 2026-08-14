@@ -7,6 +7,7 @@ import { formatQty } from '../../../domain/units';
 import { fcfaFull } from '../../../domain/money';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { Button, Card, EmptyState, SectionLabel } from '../../../design-system/components/primitives';
+import { IconClose } from '../../../design-system/icons';
 
 /**
  * Liste de courses (§14).
@@ -14,13 +15,16 @@ import { Button, Card, EmptyState, SectionLabel } from '../../../design-system/c
  * fournisseur habituel. L'approvisionneur coche pendant ses courses.
  */
 export function Replenishment() {
-  const { state, stockOf, can } = useBuna();
+  const { state, stockOf, can, dismissFromList, dismissedIn, restoreList } = useBuna();
   const navigate = useNavigate();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  const dismissed = dismissedIn('APPRO');
 
   const rows = useMemo(() => {
     return state.items
       .filter((i) => i.kind !== 'FINISHED' && i.targetStock)
+      .filter((i) => !dismissed.has(i.id))
       .map((item) => {
         const qty = stockOf(item.id);
         return {
@@ -36,7 +40,7 @@ export function Replenishment() {
         const order = { RUPTURE: 0, CRITIQUE: 1, SURVEILLER: 2, OK: 3 };
         return order[a.health] - order[b.health];
       });
-  }, [state.items, stockOf]);
+  }, [state.items, stockOf, dismissed]);
 
   const urgent = rows.filter((r) => r.health === 'CRITIQUE' || r.health === 'RUPTURE');
   const planned = rows.filter((r) => r.health === 'SURVEILLER' || r.health === 'OK');
@@ -64,10 +68,10 @@ export function Replenishment() {
         <SectionLabel className="pt-2">{title}</SectionLabel>
         <Card padded={false}>
           {group.map(({ item, qty, need, supplier }) => (
+            <div key={item.id} className="relative border-b border-ink-100 last:border-0">
             <button
-              key={item.id}
               onClick={() => setChecked((c) => ({ ...c, [item.id]: !c[item.id] }))}
-              className="flex w-full min-h-[72px] items-center gap-3 border-b border-ink-100 px-4 py-3 text-left transition-colors last:border-0 active:bg-sable-pale"
+              className="flex w-full min-h-[72px] items-center gap-3 py-3 pl-4 pr-12 text-left transition-colors active:bg-sable-pale"
             >
               <span
                 className={clsx(
@@ -97,6 +101,19 @@ export function Replenishment() {
                 )}
               </span>
             </button>
+
+            {/* Écarter pour aujourd'hui. Ce n'est pas une suppression : la
+                ligne est calculée, elle reviendra demain si le besoin tient. */}
+            <button
+              type="button"
+              onClick={() => dismissFromList('APPRO', item.id)}
+              title={`Écarter ${item.name} de la liste du jour`}
+              aria-label={`Écarter ${item.name} de la liste du jour`}
+              className="group absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-[6px] text-ink-400 transition-colors hover:bg-critique-pale hover:text-critique"
+            >
+              <IconClose size={16} className="transition-transform duration-150 motion-safe:group-hover:rotate-90" />
+            </button>
+            </div>
           ))}
         </Card>
       </>
@@ -125,14 +142,28 @@ export function Replenishment() {
       <main className="flex-1 space-y-3 px-4 pb-32">
         {rows.length === 0 ? (
           <EmptyState
-            title="Rien à acheter"
-            body="Tous les articles sont au-dessus de leur stock cible. Rien ne presse."
+            title={dismissed.size > 0 ? 'Liste vidée pour aujourd\'hui' : 'Rien à acheter'}
+            body={
+              dismissed.size > 0
+                ? 'Tout ce qui restait a été écarté. Les lignes écartées reviennent demain.'
+                : 'Tous les articles sont au-dessus de leur stock cible. Rien ne presse.'
+            }
           />
         ) : (
           <>
             {renderGroup('Urgent', urgent)}
             {renderGroup('À prévoir', planned)}
           </>
+        )}
+
+        {dismissed.size > 0 && (
+          <button
+            type="button"
+            onClick={() => restoreList('APPRO')}
+            className="w-full rounded-[6px] border border-ink-200 bg-surface px-3 py-2.5 text-[13px] text-ink-600 transition-colors hover:border-ink-300 hover:text-cafe"
+          >
+            {dismissed.size} ligne{dismissed.size > 1 ? 's' : ''} écartée{dismissed.size > 1 ? 's' : ''} aujourd'hui · tout remettre
+          </button>
         )}
       </main>
 

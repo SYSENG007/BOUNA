@@ -66,7 +66,9 @@ export const FEATURES: Feature[] = [
     short: 'Vendre',
     Icon: IconSell,
     home: '/vente',
-    homeRequires: ['SELL', 'VIEW_ALL_SALES'],
+    // Voir les ventes n'est pas vendre : `VIEW_ALL_SALES` ouvre l'historique,
+    // pas le comptoir, et ne doit donc pas faire apparaître cet onglet.
+    homeRequires: ['SELL'],
     operations: [
       {
         id: 'vente.encaisser', label: CAPABILITY_LABEL.SELL,
@@ -136,7 +138,8 @@ export const FEATURES: Feature[] = [
     short: 'Préparer',
     Icon: IconProduction,
     home: '/production',
-    homeRequires: ['PRODUCE', 'EDIT_RECIPE'],
+    // `EDIT_RECIPE` mène aux recettes, pas à la production du jour.
+    homeRequires: ['PRODUCE'],
     operations: [
       {
         id: 'prod.apreparer', label: 'Voir ce qu\'il y a à préparer',
@@ -161,7 +164,8 @@ export const FEATURES: Feature[] = [
     short: 'Acheter',
     Icon: IconReceive,
     home: '/appro',
-    homeRequires: ['REQUEST_PURCHASE', 'PLACE_ORDER', 'RECEIVE_GOODS', 'MANAGE_SUPPLIERS'],
+    // Réceptionner ou tenir les fournisseurs n'ouvre pas la liste de courses.
+    homeRequires: ['REQUEST_PURCHASE', 'PLACE_ORDER'],
     operations: [
       {
         id: 'appro.besoins', label: 'Voir la liste de courses',
@@ -196,7 +200,8 @@ export const FEATURES: Feature[] = [
     short: 'Finance',
     Icon: IconCash,
     home: '/finance',
-    homeRequires: ['RECORD_EXPENSE', 'VIEW_FINANCES', 'CLOSE_DAY'],
+    // `CLOSE_DAY` mène à la caisse, pas au journal des dépenses.
+    homeRequires: ['RECORD_EXPENSE', 'VIEW_FINANCES'],
     operations: [
       {
         id: 'finance.depenses', label: 'Voir les dépenses',

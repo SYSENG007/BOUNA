@@ -10,7 +10,7 @@ import type { CapabilityGrant } from './capabilities';
 /**
  * Jeu de données de démonstration — Coffee Bar Auchan, mardi 12 août.
  * Reprend les chiffres des maquettes pour que l'app démarre sur un état crédible.
- * Sera remplacé par la synchronisation PowerSync dès que le backend est branché.
+ * Sera remplacé par l'hydratation Supabase dès que le backend est branché.
  */
 
 export const ORG_ID = 'org-buna';

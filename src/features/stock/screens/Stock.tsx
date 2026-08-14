@@ -28,7 +28,13 @@ export function Stock() {
   const { state, stockOf, can } = useBuna();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [locationFilter, setLocationFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
+
+  const locationOptions = useMemo(() => [
+    { value: 'ALL', label: 'Tous les emplacements' },
+    ...LOCATIONS.map(l => ({ value: l.id, label: l.name }))
+  ], []);
 
   const rows = useMemo(() => {
     return state.items
@@ -36,22 +42,31 @@ export function Stock() {
       .filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
       .map((item) => {
         // On affiche l'emplacement qui porte l'essentiel du stock : c'est là qu'on ira le chercher.
-        const perLocation = LOCATIONS.map((l) => ({ l, qty: stockOf(item.id, l.id) }))
+        const perLocation = LOCATIONS
+          .filter((l) => locationFilter === 'ALL' || l.id === locationFilter)
+          .map((l) => ({ l, qty: stockOf(item.id, l.id) }))
           .filter((x) => x.qty > 0)
           .sort((a, b) => b.qty - a.qty);
-        const total = stockOf(item.id);
+          
+        const total = locationFilter === 'ALL' 
+          ? stockOf(item.id) 
+          : stockOf(item.id, locationFilter);
+
         return {
           item,
           total,
-          location: perLocation[0]?.l.name ?? 'Aucun emplacement',
+          location: locationFilter !== 'ALL' 
+            ? (LOCATIONS.find(l => l.id === locationFilter)?.name ?? 'Inconnu')
+            : (perLocation[0]?.l.name ?? 'Aucun emplacement'),
           health: stockHealth(total, item),
         };
       })
+      .filter(r => locationFilter === 'ALL' || r.total > 0 || r.item.targetStock !== undefined)
       .sort((a, b) => {
         const order = { RUPTURE: 0, CRITIQUE: 1, SURVEILLER: 2, OK: 3 };
         return order[a.health] - order[b.health];
       });
-  }, [state.items, filter, query, stockOf]);
+  }, [state.items, filter, query, stockOf, locationFilter]);
 
   /* §66 — théorique vs réel sur le lait, calculé depuis les ventes du jour. */
   const milkVariance = useMemo(() => {
@@ -113,8 +128,21 @@ export function Stock() {
           </Button>
         )}
         <Field label="" placeholder="Rechercher un article" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <div className="-mx-4 overflow-x-auto px-4">
+        <div className="-mx-4 overflow-x-auto px-4 flex flex-col gap-3">
           <Segmented value={filter} onChange={setFilter} options={FILTERS} />
+          <div className="flex gap-2 pb-1 overflow-x-auto no-scrollbar">
+            {locationOptions.map(opt => (
+              <Button
+                key={opt.value}
+                size="compact"
+                variant={locationFilter === opt.value ? 'primary' : 'secondary'}
+                onClick={() => setLocationFilter(opt.value)}
+                className="whitespace-nowrap flex-shrink-0"
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 

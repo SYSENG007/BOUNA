@@ -7,12 +7,5 @@
   },
   "assets": {
     "not_found_handling": "single-page-application"
-  },
-
-  // Custom domain — Wrangler will automatically create the DNS record
-  // in your Cloudflare-managed buna.sn zone.
-  "routes": [
-    { "pattern": "buna.sn", "custom_domain": true },
-    { "pattern": "www.buna.sn", "custom_domain": true }
-  ]
+  }
 }

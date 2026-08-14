@@ -58,7 +58,7 @@ interface State {
   variances: Variance[];
 }
 
-const initialState: State = {
+export const initialState: State = {
   currentUserId: null,
   items: ITEMS,
   movements: SEED_MOVEMENTS,
@@ -110,7 +110,7 @@ type Action =
   | { type: 'REVOKE'; userId: UUID; capabilities: Capability[]; by: Actor }
   | { type: 'RESOLVE_VARIANCE'; varianceId: UUID; resolution: Resolution; note?: string; by: Actor };
 
-function reducer(state: State, action: Action): State {
+export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'HYDRATE':
       return action.state;
@@ -963,6 +963,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       }
 
       const supplierName = SUPPLIERS.find((s) => s.id === supplierId)?.name ?? 'Fournisseur';
+      const itemNames = Array.from(new Set(eventLines.map(l => itemsMap.get(l.itemId)?.name).filter(Boolean))).join(', ');
 
       dispatch({
         type: 'COMMIT',
@@ -989,7 +990,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           id: uuid(),
           amount: goods + transportCost,
           category: 'MATIERE',
-          description: `Achat — ${supplierName}`,
+          description: itemNames ? `Achat ${itemNames}` : `Achat — ${supplierName}`,
           supplierId,
           paymentMethod,
           userId: actor.userId,

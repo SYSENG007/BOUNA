@@ -7,6 +7,7 @@ import { BunaLockup, BunaLogo } from '../design-system/components/BunaLogo';
 import { SyncIndicator } from '../design-system/components/SyncIndicator';
 import { IconChevronLeft, IconChevronRight } from '../design-system/icons';
 import { POST_LABEL } from '../domain/capabilities';
+import { ErrorBoundary } from './ErrorBoundary';
 import { Login } from './Login';
 import { OperationSheet } from './OperationSheet';
 import { railFor, tabsFor, type NavItem } from './navigation';
@@ -161,7 +162,20 @@ export function AppShell() {
           className="shell-canvas flex flex-1 flex-col"
           style={isMobile && !immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
         >
-          <Outlet />
+          {/*
+            La limite est posée ici, et pas plus haut, parce que c'est le seul
+            endroit où la coque survit à l'écran : le rail et la barre d'onglets
+            sont rendus en dehors, donc un écran qui tombe laisse la navigation
+            debout. La personne change d'onglet et continue de travailler.
+
+            `key={pathname}` fait le reste : sans lui, une limite passée en
+            erreur y resterait, et tous les écrans suivants hériteraient du
+            repli d'un écran qu'on vient de quitter. Changer d'onglet doit
+            suffire à repartir — c'est le geste qu'on prend naturellement.
+          */}
+          <ErrorBoundary key={pathname} zone={`écran ${pathname}`} shellIntact>
+            <Outlet />
+          </ErrorBoundary>
         </div>
 
         {isMobile && !immersive && (

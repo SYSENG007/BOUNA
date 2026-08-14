@@ -41,9 +41,22 @@ export function Replenishment() {
   const urgent = rows.filter((r) => r.health === 'CRITIQUE' || r.health === 'RUPTURE');
   const planned = rows.filter((r) => r.health === 'SURVEILLER' || r.health === 'OK');
 
-  const estimated = rows
-    .filter((r) => checked[r.item.id])
-    .reduce((sum, r) => sum + r.need * (r.item.weightedAvgCost ?? 0), 0);
+  const selected = rows.filter((r) => checked[r.item.id]);
+  const estimated = selected.reduce((sum, r) => sum + r.need * (r.item.weightedAvgCost ?? 0), 0);
+
+  /* La commande reprend ce qui est coché : article, quantité manquante et
+     dernier prix connu, modifiables ensuite ligne par ligne. */
+  const openPurchase = () =>
+    navigate('/appro/commande', {
+      state: {
+        lines: selected.map((r) => ({
+          itemId: r.item.id,
+          quantity: Math.ceil(r.need),
+          unitPrice: Math.round(r.item.weightedAvgCost ?? 0),
+        })),
+        supplierId: selected[0]?.supplier?.id,
+      },
+    });
 
   const renderGroup = (title: string, group: typeof rows) =>
     group.length > 0 && (
@@ -112,13 +125,19 @@ export function Replenishment() {
         )}
       </main>
 
-      {estimated > 0 && (
-        <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
-          <Button variant="primary" size="counter" full onClick={() => navigate('/achats/nouveau')}>
-            Enregistrer l'achat — ~{fcfaFull(estimated)}
-          </Button>
-        </div>
-      )}
+      {/* La barre est toujours là. Elle ne dépendait que du coût estimé : un
+          article sans coût connu donnait zéro, la barre disparaissait, et il
+          devenait impossible d'acheter précisément ce qu'on n'avait jamais
+          acheté. On peut aussi partir de rien et composer sa commande. */}
+      <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
+        <Button variant="primary" size="counter" full onClick={openPurchase}>
+          {selected.length === 0
+            ? 'Composer un achat'
+            : estimated > 0
+              ? `Enregistrer l'achat — ~${fcfaFull(estimated)}`
+              : `Enregistrer l'achat — ${selected.length} article${selected.length > 1 ? 's' : ''}`}
+        </Button>
+      </div>
     </div>
   );
 }

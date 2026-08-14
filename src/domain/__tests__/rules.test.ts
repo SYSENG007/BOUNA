@@ -75,7 +75,7 @@ describe('Écart de caisse et pertes', () => {
   it('alerte au-delà du seuil de tolérance', () => {
     const { notifications } = evaluateRules({ ...at(24), cashVariance: -7000 }, {});
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].actionTarget).toBe('/cloture');
+    expect(notifications[0].actionTarget).toBe('/finance/caisse');
   });
 
   it('ne se répète pas quand le cooldown vaut 0', () => {

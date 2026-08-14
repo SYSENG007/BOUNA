@@ -55,18 +55,21 @@ export function tabsFor(capabilities: readonly Capability[], firstName: string):
 }
 
 /**
- * Le rail de bureau montre tout : la place existe, la replier serait un choix
- * par défaut hérité du mobile plutôt qu'une décision.
+ * Le rail de bureau liste les features et les alertes — pas le profil.
+ *
+ * Il figurait ici ET en pied de rail : le même prénom apparaissait deux fois
+ * dans la même colonne, à trente centimètres d'écart. Le pied gagne, parce
+ * qu'il porte déjà le poste, le nombre d'accès et la déconnexion.
+ *
+ * Le rail se replie (voir `AppShell`), mais son contenu ne change pas en se
+ * repliant : replier masque les libellés, jamais des destinations. Une
+ * navigation qui perd des entrées selon sa largeur n'est plus apprenable.
  */
-export function railFor(capabilities: readonly Capability[], firstName: string): NavItem[] {
+export function railFor(capabilities: readonly Capability[]): NavItem[] {
   const features = featuresFor(capabilities).map((f) => ({
     to: f.home, label: f.label, Icon: f.Icon, match: f.home,
   }));
-  return [
-    ...features,
-    ALERTS,
-    { to: '/moi', label: firstName || 'Moi', Icon: IconMore, match: '/moi' },
-  ];
+  return [...features, ALERTS];
 }
 
 export { homeFor };

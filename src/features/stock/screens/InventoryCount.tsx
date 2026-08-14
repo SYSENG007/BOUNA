@@ -168,7 +168,7 @@ export function InventoryCount() {
         )}
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         {!revealed ? (
           <Button
             variant="primary"

@@ -212,3 +212,14 @@
   right: var(--rail-gutter);
   padding-inline: 1rem;
 }
+
+/* Barre d'action ancrée au bas de l'écran.
+   La respiration sous le bouton s'AJOUTE à la marge de sécurité iOS, elle ne
+   la remplace pas. `.safe-b` seule posait `padding-bottom: env(...)`, soit
+   zéro sur un poste de bureau : le geste final collait au bord de l'écran, et
+   toute utilitaire `pb-*` posée à côté perdait l'arbitrage — même
+   spécificité, cette règle-ci arrive après. */
+.action-bar {
+  padding-top: 0.875rem;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+}

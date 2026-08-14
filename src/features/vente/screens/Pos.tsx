@@ -103,7 +103,7 @@ export function Pos() {
       {count > 0 && (
         <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
           <button
-            onClick={() => navigate('/vendre/panier')}
+            onClick={() => navigate('/vente/panier')}
             className="no-select flex min-h-[56px] w-full items-center justify-between gap-3 rounded-[8px] bg-cafe px-5 text-sable-pale"
             style={{ boxShadow: 'var(--shadow-e2)' }}
           >

@@ -158,7 +158,7 @@ export function Transfer() {
         )}
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-40 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-40 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <Button variant="primary" size="counter" full disabled={!canSubmit} onClick={submit}>
           {!selected
             ? 'Choisissez un article'

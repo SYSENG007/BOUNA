@@ -79,7 +79,7 @@ export function Waste() {
         </div>
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <Button variant="primary" size="counter" full onClick={submit} disabled={!reason}>
           {reason ? 'Enregistrer la perte' : 'Choisissez un motif'}
         </Button>

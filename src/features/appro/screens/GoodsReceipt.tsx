@@ -6,7 +6,7 @@ import { formatQty } from '../../../domain/units';
 import { PAYMENT_LABEL, UNIT_LABEL, type PaymentMethod } from '../../../domain/types';
 import { ScreenHeader } from '../../../design-system/components/patterns';
 import {
-  Button, Card, Field, SectionLabel, SelectField,
+  Button, Card, EmptyState, Field, SectionLabel, SelectField,
 } from '../../../design-system/components/primitives';
 
 interface Line { itemId: string; quantity: number; unitPrice: number }
@@ -29,9 +29,27 @@ export function GoodsReceipt() {
   );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
 
+  /* Le tiroir d'opérations mène ici directement, sans commande en cours.
+     Le `navigate()` posé pendant le rendu ne partait pas : l'écran restait
+     vide, sans un mot. Une réception sans commande n'a pas de sens — on le
+     dit, et on donne la sortie. */
   if (!routed.supplierId || ordered.length === 0) {
-    navigate('/achats/nouveau', { replace: true });
-    return null;
+    return (
+      <div className="flex min-h-full flex-1 flex-col bg-ivoire">
+        <ScreenHeader title="Réception" onBack={() => navigate('/appro')} />
+        <main className="flex flex-1 flex-col justify-center px-4">
+          <EmptyState
+            title="Aucune commande à réceptionner"
+            body="On ne réceptionne que ce qui a été commandé. Composez d'abord l'achat : vous saisirez ensuite ce qui est réellement arrivé, quantité par quantité."
+          />
+          <div className="mt-4">
+            <Button variant="primary" size="counter" full onClick={() => navigate('/appro/commande')}>
+              Composer un achat
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   const lines = ordered
@@ -127,7 +145,7 @@ export function GoodsReceipt() {
         </Card>
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <Button variant="primary" size="counter" full disabled={lines.length === 0} onClick={submit}>
           Valider la réception
         </Button>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useBuna, SUPPLIERS, LOCATIONS, LOC } from '../../../store/BunaStore';
 import { fcfa, fcfaFull, percent } from '../../../domain/money';
 import { weightedAverageCost } from '../../../domain/stock';
@@ -21,12 +21,22 @@ export function Purchase() {
   const navigate = useNavigate();
 
   const purchasable = state.items.filter((i) => i.kind !== 'FINISHED');
-  const [supplierId, setSupplierId] = useState(SUPPLIERS[0].id);
+
+  /* Ce que l'approvisionneur a coché dans la liste de courses arrive ici :
+     article, quantité manquante, dernier prix connu. Sans cette reprise, il
+     refaisait sa liste de tête devant le fournisseur.
+     À défaut, une ligne vide sur le premier article achetable — surtout PAS
+     un identifiant en dur : `it-lait` n'existe que dans le jeu de démonstration,
+     et la ligne disparaissait silencieusement sur des données réelles. */
+  const routed = (useLocation().state ?? {}) as { lines?: Line[]; supplierId?: string };
+  const [supplierId, setSupplierId] = useState(routed.supplierId ?? SUPPLIERS[0].id);
   const [locationId, setLocationId] = useState<string>(LOC.CENTRAL);
   const [transport, setTransport] = useState(0);
-  const [lines, setLines] = useState<Line[]>([
-    { itemId: 'it-lait', quantity: 20, unitPrice: 1100 },
-  ]);
+  const [lines, setLines] = useState<Line[]>(() => {
+    if (routed.lines?.length) return routed.lines;
+    const first = purchasable[0];
+    return first ? [{ itemId: first.id, quantity: 1, unitPrice: first.weightedAvgCost ?? 0 }] : [];
+  });
 
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
   const total = subtotal + transport;
@@ -163,14 +173,14 @@ export function Purchase() {
         </p>
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <div className="flex gap-2.5">
           <Button className="flex-1" onClick={() => navigate(-1)}>Annuler</Button>
           <Button
             variant="primary"
             className="flex-[1.6]"
             disabled={subtotal <= 0}
-            onClick={() => navigate('/achats/reception', { state: { supplierId, locationId, lines, transport } })}
+            onClick={() => navigate('/appro/reception', { state: { supplierId, locationId, lines, transport } })}
           >
             Passer à la réception
           </Button>

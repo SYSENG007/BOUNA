@@ -11,13 +11,13 @@ export function Cart() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
-      <ScreenHeader title="Votre panier" onBack={() => navigate('/vendre')} />
+      <ScreenHeader title="Votre panier" onBack={() => navigate('/vente')} />
 
       {lines.length === 0 ? (
         <EmptyState
           title="Panier vide"
           body="Retournez à la grille et appuyez sur un produit pour commencer la vente."
-          action={<Button variant="primary" onClick={() => navigate('/vendre')}>Retour à la grille</Button>}
+          action={<Button variant="primary" onClick={() => navigate('/vente')}>Retour à la grille</Button>}
         />
       ) : (
         <>
@@ -63,8 +63,8 @@ export function Cart() {
             </div>
           </main>
 
-          <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
-            <Button variant="primary" size="counter" full onClick={() => navigate('/vendre/encaissement')}>
+          <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
+            <Button variant="primary" size="counter" full onClick={() => navigate('/vente/encaissement')}>
               Encaisser {fcfaFull(total)}
             </Button>
           </div>

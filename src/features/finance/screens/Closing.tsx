@@ -38,7 +38,7 @@ export function Closing() {
 
   const submit = () => {
     closeCashSession(counted, reason || undefined);
-    navigate('/aujourdhui', { replace: true });
+    navigate('/pilotage', { replace: true });
   };
 
   return (

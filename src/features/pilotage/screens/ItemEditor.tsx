@@ -210,7 +210,7 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
         )}
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <div className="flex gap-2.5">
           <Button size="counter" className="flex-1" onClick={onDone}>Annuler</Button>
           <Button variant="primary" size="counter" className="flex-[1.6]" disabled={nameMissing} onClick={submit}>

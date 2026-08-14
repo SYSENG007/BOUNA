@@ -100,7 +100,7 @@ export function Production() {
                     variant="primary"
                     size="compact"
                     onClick={() =>
-                      navigate('/production/batch', {
+                      navigate('/production/preparation', {
                         state: { itemId: product.id, planned: toProduce, recipeVersionId: recipe.id },
                       })
                     }
@@ -124,7 +124,7 @@ export function Production() {
                   detail={`${formatQty(qty, item.unit)} restants · minimum ${formatQty(item.minimumStock ?? 0, item.unit)}`}
                   tone={HEALTH_TONE[health]}
                   actionLabel="Signaler à l'approvisionnement"
-                  onClick={() => navigate('/approvisionnement')}
+                  onClick={() => navigate('/appro')}
                 />
               ))}
             </Card>
@@ -133,7 +133,7 @@ export function Production() {
       </main>
 
       <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
-        <Button variant="primary" size="counter" full onClick={() => navigate('/production/batch')}>
+        <Button variant="primary" size="counter" full onClick={() => navigate('/production/preparation')}>
           Déclarer un batch
         </Button>
       </div>

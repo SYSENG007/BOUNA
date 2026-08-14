@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useBuna } from '../../../store/BunaStore';
 import { fcfa, percent } from '../../../domain/money';
 import { AmountRow, ScreenHeader } from '../../../design-system/components/patterns';
@@ -15,10 +15,9 @@ export function Receipt() {
   const routed = (useLocation().state ?? {}) as { saleId?: string };
   const sale = state.sales.find((s) => s.id === routed.saleId) ?? state.sales[0];
 
-  if (!sale) {
-    navigate('/vendre', { replace: true });
-    return null;
-  }
+  // Naviguer pendant le rendu est un effet de bord déguisé : React peut le
+  // rejouer ou l'écraser. La redirection déclarative, elle, est un rendu.
+  if (!sale) return <Navigate to="/vente" replace />;
 
   const margin = sale.total - sale.cogs;
   const marginPct = sale.total > 0 ? (margin / sale.total) * 100 : 0;
@@ -69,12 +68,12 @@ export function Receipt() {
         </p>
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
         <div className="flex gap-2.5">
-          <Button size="counter" className="flex-1" onClick={() => navigate('/commandes')}>
+          <Button size="counter" className="flex-1" onClick={() => navigate('/vente/historique')}>
             Voir les ventes
           </Button>
-          <Button variant="primary" size="counter" className="flex-[1.4]" onClick={() => navigate('/vendre')}>
+          <Button variant="primary" size="counter" className="flex-[1.4]" onClick={() => navigate('/vente')}>
             Nouvelle vente
           </Button>
         </div>

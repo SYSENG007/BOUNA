@@ -81,7 +81,7 @@ export function evaluateRules(
         actionLabel: isFinished
           ? `Lancer un batch de ${Math.ceil(need)}`
           : `Ajouter ${formatQty(need, item.unit)} au bon de commande`,
-        actionTarget: isFinished ? '/production/batch' : '/approvisionnement',
+        actionTarget: isFinished ? '/production/preparation' : '/appro',
         recipientCapabilities: isFinished ? ['PRODUCE'] : ['REQUEST_PURCHASE', 'PLACE_ORDER'],
       });
     }
@@ -97,7 +97,7 @@ export function evaluateRules(
           title: `Demande forte — ${item.name}`,
           body: `${sold} vendus aujourd'hui, ${Math.floor(qty)} restants au comptoir`,
           actionLabel: `Préparer ${Math.max(10, sold - Math.floor(qty))} unités`,
-          actionTarget: '/production/batch',
+          actionTarget: '/production/preparation',
           recipientCapabilities: ['PRODUCE'],
         });
       }
@@ -113,7 +113,7 @@ export function evaluateRules(
       title: 'Écart de caisse à justifier',
       body: `${input.cashVariance > 0 ? '+' : ''}${Math.round(input.cashVariance)} FCFA entre l'attendu et le compté`,
       actionLabel: "Ouvrir la clôture",
-      actionTarget: '/cloture',
+      actionTarget: '/finance/caisse',
       recipientCapabilities: ['RESOLVE_VARIANCE', 'CLOSE_DAY'],
     });
   }

@@ -51,7 +51,7 @@ export function Finance() {
               ]}
             />
             {tab === 'EXPENSES' && (
-              <Button variant="primary" size="compact" onClick={() => navigate('/finance/nouvelle-depense')}>
+              <Button variant="primary" size="compact" onClick={() => navigate('/finance/depense')}>
                 <IconPlus size={15} />
                 Dépense
               </Button>

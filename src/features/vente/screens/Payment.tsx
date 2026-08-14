@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useCart } from '../CartContext';
 import { useBuna } from '../../../store/BunaStore';
@@ -19,11 +19,14 @@ export function Payment() {
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [received, setReceived] = useState<number>(total);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
 
-  if (lines.length === 0) {
-    navigate('/vendre', { replace: true });
-    return null;
-  }
+  /* Arriver ici sans panier n'a pas de sens : on renvoie à la grille.
+     Mais `clear()` vide le panier AVANT que la navigation vers le reçu ne
+     prenne effet — sans le drapeau `done`, cette garde se déclencherait sur
+     le rendu intermédiaire et renverrait le vendeur à la grille, sa vente
+     encaissée et son reçu jamais affiché. C'était le cas. */
+  if (lines.length === 0 && !done) return <Navigate to="/vente" replace />;
 
   /* Coupures usuelles : l'exact d'abord, puis ce que les clients tendent vraiment. */
   const suggestions = [total, 5000, 10000, 20000].filter((v, i, a) => v >= total && a.indexOf(v) === i);
@@ -33,8 +36,9 @@ export function Payment() {
     setBusy(true);
     const sale = completeSale(lines, method, method === 'CASH' ? received : total);
     if (sale) {
+      setDone(true);
       clear();
-      navigate('/vendre/recu', { replace: true, state: { saleId: sale.id } });
+      navigate('/vente/recu', { replace: true, state: { saleId: sale.id } });
     } else {
       setBusy(false);
     }
@@ -42,7 +46,7 @@ export function Payment() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
-      <ScreenHeader title="Encaissement" onBack={() => navigate('/vendre/panier')} />
+      <ScreenHeader title="Encaissement" onBack={() => navigate('/vente/panier')} />
 
       <main className="flex-1 px-4 pb-40 pt-4">
         <div className="rounded-[8px] bg-cafe px-5 py-5 text-sable-pale">
@@ -100,8 +104,19 @@ export function Payment() {
         )}
       </main>
 
-      <div className="safe-b rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 py-3 backdrop-blur">
-        <Button variant="primary" size="counter" full onClick={submit} disabled={busy}>
+      <div className="action-bar rail-bar bottom-0 z-20 border-t border-ink-200 bg-ivoire/95 backdrop-blur">
+        {/* Le geste final du comptoir : plus haut que les autres actions,
+            détaché du bord, avec une ombre qui le pose au-dessus du contenu.
+            C'est le seul bouton de l'écran, il doit se voir comme tel. */}
+        <Button
+          variant="primary"
+          size="counter"
+          full
+          onClick={submit}
+          disabled={busy}
+          className="min-h-[62px] rounded-[10px] text-[17px] tracking-[0.01em]"
+          style={{ boxShadow: 'var(--shadow-key)' }}
+        >
           Valider — {PAYMENT_LABEL[method]}
         </Button>
       </div>

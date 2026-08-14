@@ -37,6 +37,7 @@ from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.prosecdef                              -- SECURITY DEFINER = celles qui contournent RLS
   and p.proname not in ('has_capability', 'current_org_id')
+  and p.prorettype <> 'pg_catalog.event_trigger'::regtype  -- non invocables directement
 order by public_execute desc, 1;
 
 \echo
@@ -76,7 +77,8 @@ where t.typname = 'capability';
 select indexname,
        case when indexdef like '%revoked_at IS NULL%' then 'OK' else 'ÉCHEC' end as verdict
 from pg_indexes
-where schemaname = 'public' and tablename = 'user_capabilities' and indexdef like '%UNIQUE%';
+where schemaname = 'public' and tablename = 'user_capabilities'
+  and indexdef like '%UNIQUE%' and indexname not like '%\_pkey';
 
 \echo
 \echo '=== 7. Les colonnes actor existent sur les 7 tables tracées ==========='

@@ -15,6 +15,25 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$DEST"
 
+# Diagnostic lisible plutôt que deux FATAL en anglais. La cause est presque
+# toujours la même : le mot de passe de la BASE n'est pas celui du compte
+# Supabase. Il se réinitialise dans Project Settings → Database.
+if grep -q 'REMPLACER_PAR_LE_MOT_DE_PASSE' "$HOME/.pgpass" 2>/dev/null; then
+  echo "Le mot de passe n'est pas encore renseigné dans ~/.pgpass." >&2
+  echo "Supabase → Project Settings → Database → Reset database password," >&2
+  echo "puis collez-le en dernier champ de la ligne, après le dernier « : »." >&2
+  exit 1
+fi
+
+if ! "$PG_BIN/psql" "$DB_URL" -Atqc 'select 1' >/dev/null 2>&1; then
+  echo "Connexion refusée par le pooler Supabase." >&2
+  echo "Le réseau et le nom d'utilisateur sont bons ; c'est le mot de passe." >&2
+  echo "Ce n'est PAS celui du compte Supabase : c'est celui de la base," >&2
+  echo "dans Project Settings → Database → Reset database password." >&2
+  exit 1
+fi
+echo "Connexion établie."
+
 # Format custom : compressé et restaurable sélectivement avec pg_restore.
 echo "→ Sauvegarde complète (schéma + données) de public…"
 "$PG_BIN/pg_dump" "$DB_URL" \

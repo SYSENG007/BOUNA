@@ -498,7 +498,7 @@ begin
   end if;
 
   if not public.has_capability('SELL') then
-    raise exception 'Vous n''avez pas l''autorisation de enregistrer une vente.'
+    raise exception 'Vous n''avez pas l''autorisation d''enregistrer une vente.'
       using errcode = '42501';
   end if;
 
@@ -622,7 +622,7 @@ begin
     from public.profiles where id = v_user;
 
   if not public.has_capability('VOID_SALE') then
-    raise exception 'Vous n''avez pas l''autorisation de annuler une vente.'
+    raise exception 'Vous n''avez pas l''autorisation d''annuler une vente.'
       using errcode = '42501';
   end if;
 
@@ -871,7 +871,7 @@ begin
     from public.profiles where id = v_user;
 
   if not public.has_capability('APPROVE_PURCHASE') then
-    raise exception 'Vous n''avez pas l''autorisation de approuver une demande d'achat.'
+    raise exception 'Vous n''avez pas l''autorisation d''approuver une demande d''achat.'
       using errcode = '42501';
   end if;
 
@@ -929,7 +929,7 @@ begin
     from public.profiles where id = v_user;
 
   if not public.has_capability('APPROVE_PURCHASE') then
-    raise exception 'Vous n''avez pas l''autorisation de refuser une demande d'achat.'
+    raise exception 'Vous n''avez pas l''autorisation de refuser une demande d''achat.'
       using errcode = '42501';
   end if;
 

@@ -8,6 +8,7 @@ import type {
   Expense, Item, Purchase, Recipe, RecipeVersion, Sale, SaleLine, Site, StockLocation,
   StockMovement, WasteEvent,
 } from '../types';
+import { TEST_ACTOR } from './actors';
 
 /**
  * Cas de terrain, pas cas d'école : une semaine à cheval sur deux mois, une
@@ -69,6 +70,7 @@ function sale(createdAt: string, lines: LineTuple[], over: Partial<Sale> = {}): 
     amountReceived: 0,
     status: 'COMPLETED',
     createdAt,
+    actor: TEST_ACTOR,
     ...over,
   };
 }
@@ -87,6 +89,7 @@ function mv(over: Partial<StockMovement> & { createdAt: string }): StockMovement
     referenceId: 'r',
     userId: 'u-aicha',
     deviceId: 'd',
+    actor: TEST_ACTOR,
     ...over,
   };
 }
@@ -94,14 +97,14 @@ function mv(over: Partial<StockMovement> & { createdAt: string }): StockMovement
 function expense(createdAt: string, amount: number, category: Expense['category']): Expense {
   return {
     id: nextId('ex'), amount, category, description: category,
-    paymentMethod: 'CASH', userId: 'u-fatou', createdAt,
+    paymentMethod: 'CASH', userId: 'u-fatou', createdAt, actor: TEST_ACTOR,
   };
 }
 
 function waste(createdAt: string, cost: number, locationId = 'loc-pos-a'): WasteEvent {
   return {
     id: nextId('w'), itemId: 'it-vanilla', locationId, quantity: 1, unit: 'unite',
-    cost, reason: 'INVENDU', userId: 'u-aicha', createdAt,
+    cost, reason: 'INVENDU', userId: 'u-aicha', createdAt, actor: TEST_ACTOR,
   };
 }
 
@@ -436,6 +439,7 @@ describe('Analytique fournisseurs', () => {
       total: lines.reduce((s, l) => s + l.quantity * l.actualUnitPrice, 0),
       paymentMethod: 'CASH',
       receivedAt: null,
+      actor: TEST_ACTOR,
       ...over,
     };
   }

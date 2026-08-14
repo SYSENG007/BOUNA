@@ -1,77 +1,49 @@
-# Feuille de route — PRD → implémentation
+# Feuille de route
 
-Correspondance entre les sprints du PRD et l'état du dépôt.
+## Fait
 
-## Sprint 0 — Foundation ✅
+**Socle capacités.** Le poste n'autorise plus rien ; la capacité, accordée et
+révocable, décide. 25 capacités, 6 features, un registre unique dont dérivent
+les routes, la navigation, le tiroir d'opérations et l'écran de délégation.
+Côté serveur : `has_capability()`, 43 politiques réécrites, 9 fonctions
+transactionnelles gardées. Voir `docs/ARCHITECTURE-V2.md`.
 
-| Élément | État | Où |
-| --- | --- | --- |
-| Project setup (Vite, TS, Tailwind, Router) | fait | racine |
-| Design system | fait | `src/index.css`, `src/design-system/` |
-| PWA shell (service worker, manifest, installable) | fait | `vite.config.ts` |
-| RBAC | fait | `src/domain/permissions.ts` + RLS |
-| Base locale | fait, à remplacer | `src/store/persist.ts` |
-| Schéma PostgreSQL | fait | `supabase/migrations/0001_core.sql` |
-| RLS | fait | `0002_rls.sql` |
-| Authentication | **à faire** | Supabase Auth à brancher sur `Login.tsx` |
-| PowerSync PoC | **à faire** | remplace `persist.ts` + `outbox.ts` |
+**Traçabilité.** Chaque fait porte un `Actor` — qui, quand, depuis quel appareil,
+et **sous quelle capacité**. Rendu partout par `<ActorStamp>`.
 
-## Sprint 1 — Catalogue & Stock ✅
+**Tableau de bord unifié.** `Today` et `Cockpit` fusionnés. `analytics.ts` enfin
+branché : agrégats de période, série comparée, rentabilité horaire, marge par
+produit. Six primitives graphiques SVG, sans dépendance.
 
-Items, unités et conversions, emplacements, mouvements, requêtes de stock : `src/domain/`.
-Couvert par 13 tests d'acceptation (`npm run test`).
+**Trésorerie.** `domain/cashflow.ts` : entrées et sorties par moyen de paiement,
+solde cumulé, autonomie, coût estimé du réapprovisionnement.
 
-## Sprint 2 — Procurement ◐
+**Écarts et recouvrements.** Caisse, stock et rendement produisent des écarts
+datés. Un écart ouvert remonte au tableau de bord jusqu'à ce que quelqu'un lui
+donne un motif. Le motif décide de ce qu'il coûte.
 
-Fait : liste de courses calculée, achat, réception partielle, historique de prix,
-impact coût moyen pondéré affiché avant validation.
-À faire : PurchaseRequest et workflow d'approbation, comparaison multi-fournisseurs (§20).
+## À faire
 
-## Sprint 3 — Production ◐
+1. **Brancher `domain/closing.ts`** — les cinq étapes de la clôture, le
+   verrouillage de journée, la réouverture motivée. Écrit, testé, dormant.
+2. **Appliquer les migrations 0009 et 0010** sur Supabase, puis vérifier en
+   base : qu'un compte sans `RECEIVE_GOODS` se fait refuser `receive_goods`,
+   que `has_capability` garde son `execute` pour `anon, authenticated`, et que
+   la vue `capability_journal` est bien `security_invoker`.
+3. **Écrans d'approbation d'achat et de fournisseurs** — les fonctions serveur
+   existent, l'interface manque.
+4. **Raccourcir les flux** feature par feature, et généraliser la saisie à
+   l'aveugle au rendement de production.
+5. **Notifications** — moteur de règles côté serveur, cooldown, Web Push.
 
-Fait : recettes versionnées et gelées, batch avec consommation déduite, rendement,
-emplacement de destination.
-À faire : mode « made to order » (§27-B), production recommandée par vitesse de vente (§29).
+## Vérifier
 
-## Sprint 4 — POS ✅
-
-Grille, appui long = −1, panier, quatre moyens de paiement, monnaie à rendre,
-vente atomique, reçu montrant les déductions, annulation motivée.
-
-## Sprint 5 — Cash & Closing ◐
-
-Fait : session de caisse, clôture guidée avec attendu masqué, écart justifié, dépenses.
-À faire : les 5 étapes complètes du daily closing (§37) et le verrouillage de journée (RULE-009).
-
-## Sprint 6 — Notifications ◐
-
-Fait : centre de notifications par rôle, sévérités, statuts, action proposée,
-tables `notification_rules` / `notifications` / `push_subscriptions` / `notification_cooldowns`.
-À faire : moteur de règles côté serveur, cooldown appliqué, Web Push, Supabase Queues + Cron.
-
-## Sprint 7 — Analytics ◐
-
-Fait : cockpit Owner (trois questions), KPI manager, top produits, dépenses par catégorie,
-théorique vs réel sur la consommation.
-À faire : agrégats semaine/mois côté PostgreSQL, analytics fournisseurs, rentabilité par heure et par site.
-
----
-
-## Brancher Supabase
-
-1. Créer le projet Supabase, récupérer l'URL et la clé anon.
-2. Appliquer les migrations dans l'ordre : `0001_core.sql`, `0002_rls.sql`, `0003_transactions.sql`.
-3. Créer une organisation, un site, des emplacements, puis les profils liés à `auth.users`.
-4. Ajouter `.env.local` :
-
-```
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
+```bash
+npm run typecheck && npm run test && npm run build
 ```
 
-5. Remplacer la sélection de profil de `src/screens/Login.tsx` par Supabase Auth.
-6. Brancher PowerSync : le contrat de `src/store/outbox.ts` (`Transport`) est déjà
-   idempotent, le serveur dédoublonne sur `event.id`.
+Sans backend, pour éprouver RULE-010 :
 
-Les fonctions `complete_sale`, `void_sale` et `receive_goods` sont les points d'entrée
-transactionnels : le client ne doit jamais écrire directement dans `sales` ou `stock_movements`.
+```bash
+npm run dev:terrain
+```

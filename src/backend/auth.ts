@@ -1,4 +1,5 @@
-import type { Role, User } from '../domain/types';
+import type { User } from '../domain/types';
+import { capabilitiesOf, post } from './mappers';
 import { supabase } from './supabase';
 
 /**
@@ -53,7 +54,7 @@ export async function loadProfile(): Promise<User | null> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, organization_id, site_id, name, role, status')
+    .select('id, organization_id, site_id, name, post, status, user_capabilities(capability, revoked_at)')
     .eq('id', userId)
     .single();
 
@@ -68,7 +69,14 @@ export async function loadProfile(): Promise<User | null> {
     organizationId: data.organization_id as string,
     siteId: data.site_id as string,
     name: data.name as string,
-    roles: [data.role as Role],
+    post: post(data.post),
+    /*
+     * Les capacités arrivent par jointure. On ne garde que les accords non
+     * révoqués : une ligne révoquée reste en base pour l'historique, elle ne
+     * donne plus rien. Et cette liste ne protège rien — elle sert à ne pas
+     * afficher un bouton que le serveur refusera. C'est RLS qui décide.
+     */
+    capabilities: capabilitiesOf(data.user_capabilities),
     status: (data.status as User['status']) ?? 'ACTIVE',
   };
   cacheProfile(profile);

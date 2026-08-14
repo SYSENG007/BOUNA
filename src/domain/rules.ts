@@ -1,4 +1,5 @@
-import type { Item, Notification, Role, Severity, UUID } from './types';
+import type { Item, Notification, Severity, UUID } from './types';
+import type { Capability } from './capabilities';
 import { replenishmentNeed, stockHealth } from './stock';
 import { formatQty } from './units';
 import { uuid } from './ids';
@@ -31,7 +32,8 @@ interface Candidate {
   severity: Severity;
   actionLabel: string;
   actionTarget: string;
-  recipientRoles: Role[];
+  /** À qui l'alerte s'adresse : décrit par ce qu'il faut pouvoir faire pour y répondre. */
+  recipientCapabilities: Capability[];
 }
 
 const SEVERITY_RANK: Record<Severity, number> = {
@@ -80,7 +82,7 @@ export function evaluateRules(
           ? `Lancer un batch de ${Math.ceil(need)}`
           : `Ajouter ${formatQty(need, item.unit)} au bon de commande`,
         actionTarget: isFinished ? '/production/batch' : '/approvisionnement',
-        recipientRoles: isFinished ? ['PREPARER', 'MANAGER'] : ['PROCUREMENT', 'MANAGER'],
+        recipientCapabilities: isFinished ? ['PRODUCE'] : ['REQUEST_PURCHASE', 'PLACE_ORDER'],
       });
     }
 
@@ -96,7 +98,7 @@ export function evaluateRules(
           body: `${sold} vendus aujourd'hui, ${Math.floor(qty)} restants au comptoir`,
           actionLabel: `Préparer ${Math.max(10, sold - Math.floor(qty))} unités`,
           actionTarget: '/production/batch',
-          recipientRoles: ['PREPARER', 'MANAGER'],
+          recipientCapabilities: ['PRODUCE'],
         });
       }
     }
@@ -112,7 +114,7 @@ export function evaluateRules(
       body: `${input.cashVariance > 0 ? '+' : ''}${Math.round(input.cashVariance)} FCFA entre l'attendu et le compté`,
       actionLabel: "Ouvrir la clôture",
       actionTarget: '/cloture',
-      recipientRoles: ['MANAGER', 'OWNER'],
+      recipientCapabilities: ['RESOLVE_VARIANCE', 'CLOSE_DAY'],
     });
   }
 
@@ -126,7 +128,7 @@ export function evaluateRules(
       body: `${Math.round(input.wasteCostToday)} FCFA de marchandise perdue`,
       actionLabel: 'Analyser les motifs',
       actionTarget: '/stock',
-      recipientRoles: ['MANAGER', 'OWNER'],
+      recipientCapabilities: ['RESOLVE_VARIANCE', 'CLOSE_DAY'],
     });
   }
 
@@ -152,7 +154,7 @@ export function evaluateRules(
       status: 'UNREAD',
       actionLabel: c.actionLabel,
       actionTarget: c.actionTarget,
-      recipientRoles: c.recipientRoles,
+      recipientCapabilities: c.recipientCapabilities,
       createdAt: new Date(now).toISOString(),
     });
   }

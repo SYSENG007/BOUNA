@@ -4,11 +4,17 @@ import {
 } from 'react';
 import type {
   AuditEvent, CashSession, DomainEvent, Expense, Item, Notification, PaymentMethod,
-  ProductionBatch, Purchase, Role, Sale, SaleLine, StockMovement, User, UUID,
+  ProductionBatch, Purchase, Sale, SaleLine, StockMovement, User, UUID,
   WasteEvent, WasteReason, Unit, EventType, StockLocation, Recipe, RecipeVersion,
 } from '../domain/types';
-import { primaryRole } from '../domain/types';
+
 import { deviceId, uuid, batchCode } from '../domain/ids';
+import type { Capability, CapabilityGrant } from '../domain/capabilities';
+import { CAPABILITY_LABEL, effectiveCapabilities } from '../domain/capabilities';
+import type { Actor } from '../domain/actor';
+import { makeActor } from '../domain/actor';
+import type { Resolution, Variance } from '../domain/variance';
+import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL, resolve as resolveVarianceFact } from '../domain/variance';
 import { convert } from '../domain/units';
 import { projectStock, weightedAverageCost } from '../domain/stock';
 import { dueEvents, pendingEvents, selectTransport } from './outbox';
@@ -23,7 +29,7 @@ import {
   LOC, LOCATIONS, RECIPES, RECIPE_VERSIONS, SITE, SUPPLIERS, USERS,
 } from './referentials';
 import {
-  ITEMS, SEED_AUDIT, SEED_CASH_SESSION, SEED_EXPENSES, SEED_MOVEMENTS,
+  ITEMS, SEED_AUDIT, SEED_CASH_SESSION, SEED_EXPENSES, SEED_GRANTS, SEED_MOVEMENTS,
   SEED_NOTIFICATIONS, SEED_PURCHASES,
 } from '../domain/seed';
 
@@ -46,6 +52,10 @@ interface State {
   batchCounter: number;
   /** §45 — dernier déclenchement par règle, pour ne pas répéter la même alerte. */
   cooldowns: Cooldowns;
+  /** Le journal des délégations. Révoquer ajoute une date, n'efface pas la ligne. */
+  grants: CapabilityGrant[];
+  /** Écarts constatés, soldés ou non. Un écart ouvert remonte au tableau de bord. */
+  variances: Variance[];
 }
 
 const initialState: State = {
@@ -64,6 +74,8 @@ const initialState: State = {
   saleCounter: 453,
   batchCounter: 4,
   cooldowns: {},
+  grants: SEED_GRANTS,
+  variances: [],
 };
 
 type Action =
@@ -88,11 +100,15 @@ type Action =
       notifications?: Notification[];
       bumpSale?: boolean;
       bumpBatch?: boolean;
+      variances?: Variance[];
     }
   | { type: 'SAVE_ITEM'; item: Item }
   | { type: 'SET_SYNC'; ids: UUID[]; status: DomainEvent['syncStatus'] }
   | { type: 'NOTIFICATION_STATUS'; id: UUID; status: Notification['status'] }
-  | { type: 'RAISE'; notifications: Notification[]; cooldowns: Cooldowns };
+  | { type: 'RAISE'; notifications: Notification[]; cooldowns: Cooldowns }
+  | { type: 'GRANT'; grants: CapabilityGrant[] }
+  | { type: 'REVOKE'; userId: UUID; capabilities: Capability[]; by: Actor }
+  | { type: 'RESOLVE_VARIANCE'; varianceId: UUID; resolution: Resolution; note?: string; by: Actor };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -173,8 +189,38 @@ function reducer(state: State, action: Action): State {
           : state.notifications,
         saleCounter: a.bumpSale ? state.saleCounter + 1 : state.saleCounter,
         batchCounter: a.bumpBatch ? state.batchCounter + 1 : state.batchCounter,
+        variances: a.variances?.length ? [...a.variances, ...state.variances] : state.variances,
       };
     }
+
+    case 'GRANT':
+      return { ...state, grants: [...state.grants, ...action.grants] };
+
+    case 'REVOKE': {
+      /*
+       * On ne retire pas la ligne : on la date. Le droit cesse, l'historique
+       * reste — sinon « qui avait le droit le 12 août ? » devient insoluble.
+       */
+      const at = new Date().toISOString();
+      return {
+        ...state,
+        grants: state.grants.map((g) =>
+          g.userId === action.userId && !g.revokedAt && action.capabilities.includes(g.capability)
+            ? { ...g, revokedAt: at, revokedBy: action.by.userId, revokedByName: action.by.userName }
+            : g,
+        ),
+      };
+    }
+
+    case 'RESOLVE_VARIANCE':
+      return {
+        ...state,
+        variances: state.variances.map((v) => {
+          if (v.id !== action.varianceId) return v;
+          // Un écart déjà soldé ne se resolde pas : le premier motif fait foi.
+          return resolveVarianceFact(v, action.resolution, action.by, action.note) ?? v;
+        }),
+      };
 
     case 'SAVE_ITEM': {
       const exists = state.items.some((i) => i.id === action.item.id);
@@ -230,6 +276,18 @@ interface Ctx {
   pending: number;
   syncing: boolean;
   lastSyncAt: string | null;
+  /** Ce que l'utilisateur courant a le droit de faire. Revalidé par RLS. */
+  can: (capability: Capability) => boolean;
+  /** Le journal des délégations — accords et révocations, datés et signés. */
+  grants: CapabilityGrant[];
+  /** Écarts constatés. Ouverts tant que personne ne les a soldés. */
+  variances: Variance[];
+  /** Accorde des capacités à quelqu'un. Réservé à MANAGE_TEAM. */
+  grantCapabilities: (userId: UUID, capabilities: Capability[]) => boolean;
+  /** Retire des capacités. La ligne reste, sa révocation est datée. */
+  revokeCapabilities: (userId: UUID, capabilities: Capability[]) => boolean;
+  /** Solde un écart avec un motif. Réservé à RESOLVE_VARIANCE. */
+  resolveVariance: (varianceId: UUID, resolution: Resolution, note?: string) => boolean;
   login: (userId: UUID) => void;
   logout: () => void;
   /** Connexion réelle. Disponible seulement quand le backend est configuré. */
@@ -257,7 +315,7 @@ interface Ctx {
   }) => void;
   recordWaste: (input: { itemId: UUID; locationId: UUID; quantity: number; reason: WasteReason }) => void;
   transferStock: (input: { itemId: UUID; from: UUID; to: UUID; quantity: number }) => void;
-  recordExpense: (input: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => void;
+  recordExpense: (input: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'actor'>) => void;
   /** Crée ou met à jour un article du catalogue. */
   saveItem: (item: Item) => void;
   saveLocation: (location: StockLocation) => void;
@@ -370,10 +428,17 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   }, [state.items, referentials]);
 
   const stock = useMemo(() => projectStock(state.movements, itemsMap), [state.movements, itemsMap]);
-  const user = useMemo(
-    () => remoteProfile ?? USERS.find((u) => u.id === state.currentUserId) ?? null,
-    [remoteProfile, state.currentUserId],
-  );
+  const user = useMemo(() => {
+    const base = remoteProfile ?? USERS.find((u) => u.id === state.currentUserId) ?? null;
+    if (!base) return null;
+    /*
+     * Les accords font foi sur le jeu figé du profil : c'est eux que le manager
+     * modifie à l'écran Équipe, et le changement doit se voir immédiatement,
+     * sans attendre un aller-retour serveur.
+     */
+    const granted = effectiveCapabilities(state.grants, base.id);
+    return granted.length ? { ...base, capabilities: granted } : base;
+  }, [remoteProfile, state.currentUserId, state.grants]);
   /* Organisation et site viennent du profil réel dès qu'il est connu (§73). */
   const orgId = user?.organizationId ?? SITE.organizationId;
   const siteId = user?.siteId ?? SITE.id;
@@ -403,6 +468,34 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
   /* ------------------------------------------------------- Fabriques */
 
+  /**
+   * Autorise une opération et rend son tampon d'auteur.
+   *
+   * Les deux gestes sont volontairement inséparables : il ne doit pas être
+   * possible d'écrire une transaction qui trace sans avoir vérifié, ni qui
+   * vérifie sans tracer. `null` veut dire « pas le droit » — et la transaction
+   * s'arrête là. Le serveur revérifie de toute façon : ceci évite d'afficher
+   * un succès que PostgreSQL refusera.
+   */
+  const authorize = useCallback(
+    (under: Capability): Actor | null => {
+      if (!user || !user.capabilities.includes(under)) return null;
+      return makeActor({
+        userId: user.id,
+        userName: user.name,
+        post: user.post,
+        under,
+        deviceId: deviceId(),
+      });
+    },
+    [user],
+  );
+
+  const can = useCallback(
+    (capability: Capability) => !!user?.capabilities.includes(capability),
+    [user],
+  );
+
   const makeEvent = useCallback(
     <P,>(eventType: EventType, entityType: string, entityId: UUID, payload: P): DomainEvent<P> => ({
       id: uuid(), // §56 — clé d'idempotence générée AVANT tout contact serveur
@@ -426,6 +519,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     (
       rawItemId: UUID, rawLocationId: UUID, quantity: number, unit: Unit,
       movementType: StockMovement['movementType'], referenceType: string, referenceId: UUID,
+      actor: Actor,
     ): StockMovement => ({
       id: uuid(),
       organizationId: orgId,
@@ -438,32 +532,32 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       movementType,
       referenceType,
       referenceId,
-      userId: user?.id ?? 'unknown',
-      deviceId: deviceId(),
-      createdAt: new Date().toISOString(),
+      userId: actor.userId,
+      deviceId: actor.deviceId,
+      createdAt: actor.at,
+      actor,
     }),
-    [user, orgId, siteId],
+    [orgId, siteId],
   );
 
   const makeAudit = useCallback(
-    (action: string, detail: string, reference?: string): AuditEvent => ({
+    (actor: Actor, action: string, detail: string, reference?: string): AuditEvent => ({
       id: uuid(),
-      userId: user?.id ?? 'unknown',
-      userName: user?.name.split(' ')[0] ?? '—',
-      role: user ? primaryRole(user) : 'SELLER' as Role,
+      actor,
       action,
       detail,
       reference,
-      createdAt: new Date().toISOString(),
+      createdAt: actor.at,
     }),
-    [user],
+    [],
   );
 
   /* ---------------------------------------------------- Transactions */
 
   const completeSale = useCallback<Ctx['completeSale']>(
     (cartLines, paymentMethod, amountReceived) => {
-      if (!cartLines.length || !user) return null;
+      const actor = authorize('SELL');
+      if (!cartLines.length || !user || !actor) return null;
 
       const lines: SaleLine[] = cartLines.map(({ item, quantity }) => ({
         itemId: resolveId(item.id),
@@ -490,7 +584,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         paymentMethod,
         amountReceived,
         status: 'COMPLETED',
-        createdAt: new Date().toISOString(),
+        createdAt: actor.at,
+        actor,
       };
 
       // Sale + SaleLines + Payment + StockMovements + COGS + Audit + DomainEvent,
@@ -500,7 +595,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         sale,
         bumpSale: true,
         movements: lines.map((l) =>
-          makeMovement(l.itemId, LOC.POS, -l.quantity, 'unite', 'SALE', 'Sale', saleId),
+          makeMovement(l.itemId, LOC.POS, -l.quantity, 'unite', 'SALE', 'Sale', saleId, actor),
         ),
         events: [
           /*
@@ -523,6 +618,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
         audit: [
           makeAudit(
+            actor,
             `Vente #${sale.number} — ${total} FCFA`,
             `${lines.map((l) => `${l.quantity} ${l.name}`).join(', ')} · ${paymentMethod}`,
             `sale:${sale.number}`,
@@ -532,31 +628,33 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
       return sale;
     },
-    [user, siteId, state.saleCounter, state.cashSession.id, makeEvent, makeMovement, makeAudit],
+    [user, siteId, state.saleCounter, state.cashSession.id, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const voidSale = useCallback<Ctx['voidSale']>(
     (saleId, reason) => {
+      const actor = authorize('VOID_SALE');
       const sale = state.sales.find((s) => s.id === saleId);
-      if (!sale || sale.status !== 'COMPLETED') return;
+      if (!sale || sale.status !== 'COMPLETED' || !actor) return;
 
       // RULE-001 : rien n'est supprimé. On compense par des mouvements inverses.
       dispatch({
         type: 'COMMIT',
         movements: sale.lines.map((l) =>
-          makeMovement(l.itemId, LOC.POS, l.quantity, 'unite', 'RETURN', 'SaleVoid', saleId),
+          makeMovement(l.itemId, LOC.POS, l.quantity, 'unite', 'RETURN', 'SaleVoid', saleId, actor),
         ),
         events: [makeEvent('SALE_CANCELLED', 'Sale', saleId, { reason })],
-        audit: [makeAudit(`Annulation vente #${sale.number}`, `motif : ${reason} · validée`, `sale:${sale.number}`)],
+        audit: [makeAudit(actor, `Annulation vente #${sale.number}`, `motif : ${reason} · validée`, `sale:${sale.number}`)],
       });
     },
-    [state.sales, makeEvent, makeMovement, makeAudit],
+    [state.sales, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const completeBatch = useCallback<Ctx['completeBatch']>(
     ({ itemId: rawItemId, recipeVersionId, planned, produced, loss, locationId: rawLocationId }) => {
+      const actor = authorize('PRODUCE');
       const version = RECIPE_VERSIONS.find((v) => v.id === recipeVersionId);
-      if (!version || !user) return;
+      if (!version || !user || !actor) return;
 
       // L'écran de production nomme encore le produit en dur : on le traduit.
       const itemId = resolveId(rawItemId);
@@ -569,17 +667,17 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       const consumption = version.ingredients.map((ing) =>
         makeMovement(
           ing.itemId, LOC.KITCHEN, -(ing.quantity * produced), ing.unit,
-          'PRODUCTION_CONSUMPTION', 'ProductionBatch', id,
+          'PRODUCTION_CONSUMPTION', 'ProductionBatch', id, actor,
         ),
       );
       const output = makeMovement(
-        itemId, locationId, produced, 'unite', 'PRODUCTION_OUTPUT', 'ProductionBatch', id,
+        itemId, locationId, produced, 'unite', 'PRODUCTION_OUTPUT', 'ProductionBatch', id, actor,
       );
 
       const batch: ProductionBatch = {
         id, code, itemId, recipeVersionId, preparerId: user.id, locationId,
         plannedQuantity: planned, producedQuantity: produced, lossQuantity: loss,
-        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        startedAt: actor.at, completedAt: actor.at, actor,
       };
 
       const yieldPct = planned > 0 ? Math.round((produced / planned) * 100) : 100;
@@ -592,16 +690,37 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         events: [
           makeEvent('BATCH_COMPLETED', 'ProductionBatch', id, { planned, produced, loss, yieldPct }),
         ],
-        audit: [makeAudit(`Batch ${code}`, `${produced}/${planned} unités · rendement ${yieldPct} %`, `batch:${code}`)],
+        audit: [makeAudit(actor, `Batch ${code}`, `${produced}/${planned} unités · rendement ${yieldPct} %`, `batch:${code}`)],
+        /*
+         * Un rendement inférieur au plan est un écart, pas une fatalité : il
+         * ouvre une question à laquelle quelqu'un devra répondre.
+         */
+        variances: loss > 0
+          ? [{
+              id: uuid(),
+              source: 'YIELD' as const,
+              reference: id,
+              subject: `Batch ${code}`,
+              theoretical: planned,
+              declared: produced,
+              delta: produced - planned,
+              amount: Math.round(loss * (itemsMap.get(itemId)?.weightedAvgCost ?? 0)),
+              actor,
+              resolution: null,
+              resolver: null,
+              createdAt: actor.at,
+            }]
+          : undefined,
       });
     },
-    [user, state.batchCounter, makeEvent, makeMovement, makeAudit],
+    [user, state.batchCounter, itemsMap, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const recordWaste = useCallback<Ctx['recordWaste']>(
     ({ itemId: rawItemId, locationId: rawLocationId, quantity, reason }) => {
+      const actor = authorize('RECORD_WASTE');
       const item = itemsMap.get(rawItemId);
-      if (!item) return;
+      if (!item || !actor) return;
       const itemId = resolveId(rawItemId);
       const locationId = resolveId(rawLocationId);
       const id = uuid();
@@ -611,56 +730,62 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         type: 'COMMIT',
         waste: {
           id, itemId, locationId, quantity, unit: item.unit, cost, reason,
-          userId: user?.id ?? 'unknown', createdAt: new Date().toISOString(),
+          userId: actor.userId, createdAt: actor.at, actor,
         },
-        movements: [makeMovement(itemId, locationId, -quantity, item.unit, 'WASTE', 'WasteEvent', id)],
+        movements: [makeMovement(itemId, locationId, -quantity, item.unit, 'WASTE', 'WasteEvent', id, actor)],
         events: [makeEvent('WASTE_RECORDED', 'WasteEvent', id, { itemId, quantity, cost, reason })],
-        audit: [makeAudit(`Perte déclarée — ${item.name}`, `${quantity} ${item.unit} · motif : ${reason} · ${cost} FCFA`)],
+        audit: [makeAudit(actor, `Perte déclarée — ${item.name}`, `${quantity} ${item.unit} · motif : ${reason} · ${Math.round(cost)} FCFA`)],
       });
     },
-    [itemsMap, user, makeEvent, makeMovement, makeAudit],
+    [itemsMap, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const transferStock = useCallback<Ctx['transferStock']>(
     ({ itemId, from, to, quantity }) => {
+      const actor = authorize('TRANSFER_STOCK');
       const item = itemsMap.get(itemId);
-      if (!item || quantity <= 0) return;
+      if (!item || quantity <= 0 || !actor) return;
       // §30 — deux mouvements cohérents partageant le même transfer_id.
       const transferId = uuid();
       dispatch({
         type: 'COMMIT',
         movements: [
-          makeMovement(itemId, from, -quantity, item.unit, 'TRANSFER_OUT', 'Transfer', transferId),
-          makeMovement(itemId, to, quantity, item.unit, 'TRANSFER_IN', 'Transfer', transferId),
+          makeMovement(itemId, from, -quantity, item.unit, 'TRANSFER_OUT', 'Transfer', transferId, actor),
+          makeMovement(itemId, to, quantity, item.unit, 'TRANSFER_IN', 'Transfer', transferId, actor),
         ],
         events: [makeEvent('STOCK_TRANSFERRED', 'Transfer', transferId, { itemId, from, to, quantity })],
-        audit: [makeAudit(`Transfert — ${item.name}`, `${quantity} ${item.unit}`)],
+        audit: [makeAudit(actor, `Transfert — ${item.name}`, `${quantity} ${item.unit}`)],
       });
     },
-    [itemsMap, makeEvent, makeMovement, makeAudit],
+    [itemsMap, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const recordExpense = useCallback<Ctx['recordExpense']>(
     (input) => {
+      const actor = authorize('RECORD_EXPENSE');
+      if (!actor) return;
       const id = uuid();
       dispatch({
         type: 'COMMIT',
-        expense: { ...input, id, userId: user?.id ?? 'unknown', createdAt: new Date().toISOString() },
+        expense: { ...input, id, userId: actor.userId, createdAt: actor.at, actor },
         events: [makeEvent('EXPENSE_RECORDED', 'Expense', id, input)],
-        audit: [makeAudit(`Dépense — ${input.description}`, `${input.amount} FCFA · ${input.category}`)],
+        audit: [makeAudit(actor, `Dépense — ${input.description}`, `${input.amount} FCFA · ${input.category}`)],
       });
     },
-    [user, makeEvent, makeAudit],
+    [authorize, makeEvent, makeAudit],
   );
 
   const saveItem = useCallback<Ctx['saveItem']>(
     (item) => {
+      const actor = authorize('MANAGE_CATALOG');
+      if (!actor) return;
       const isNew = !itemsMap.has(item.id);
       dispatch({ type: 'SAVE_ITEM', item });
       dispatch({
         type: 'COMMIT',
         audit: [
           makeAudit(
+            actor,
             isNew ? `Article créé — ${item.name}` : `Article modifié — ${item.name}`,
             `${item.kind} · ${item.unit}${item.price ? ` · ${item.price} FCFA` : ''}`,
             `item:${item.id.slice(0, 8)}`,
@@ -668,7 +793,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
       });
     },
-    [itemsMap, makeAudit],
+    [itemsMap, authorize, makeAudit],
   );
 
   const saveLocation = useCallback((location: StockLocation) => {
@@ -705,21 +830,23 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
   const archiveItem = useCallback<Ctx['archiveItem']>(
     (itemId) => {
+      const actor = authorize('MANAGE_CATALOG');
       const item = itemsMap.get(itemId);
-      if (!item) return;
+      if (!item || !actor) return;
       dispatch({ type: 'SAVE_ITEM', item: { ...item, archived: true } });
       dispatch({
         type: 'COMMIT',
-        audit: [makeAudit(`Article archivé — ${item.name}`, 'retiré du catalogue, historique conservé')],
+        audit: [makeAudit(actor, `Article archivé — ${item.name}`, 'retiré du catalogue, historique conservé')],
       });
     },
-    [itemsMap, makeAudit],
+    [itemsMap, authorize, makeAudit],
   );
 
   const adjustStock = useCallback<Ctx['adjustStock']>(
     ({ itemId, locationId, countedQuantity, reason }) => {
+      const actor = authorize('COUNT_INVENTORY');
       const item = itemsMap.get(itemId);
-      if (!item) return;
+      if (!item || !actor) return;
 
       const theoretical = stock.get(`${itemId}@${locationId}`) ?? 0;
       const delta = countedQuantity - theoretical;
@@ -730,7 +857,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'COMMIT',
         movements: [
-          makeMovement(itemId, locationId, delta, item.unit, 'ADJUSTMENT', 'InventoryCount', countId),
+          makeMovement(itemId, locationId, delta, item.unit, 'ADJUSTMENT', 'InventoryCount', countId, actor),
         ],
         events: [
           makeEvent('STOCK_COUNTED', 'InventoryCount', countId, {
@@ -739,18 +866,38 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
         audit: [
           makeAudit(
+            actor,
             `Inventaire — ${item.name}`,
             `théorique ${theoretical.toFixed(2)} · compté ${countedQuantity} · écart ${delta > 0 ? '+' : ''}${delta.toFixed(2)} ${item.unit} · motif : ${reason}`,
           ),
         ],
+        /*
+         * L'écart d'inventaire ouvre une question chiffrée. Tant qu'il n'est pas
+         * soldé, il remonte au tableau de bord — c'est la boucle qui manquait.
+         */
+        variances: [{
+          id: uuid(),
+          source: 'STOCK' as const,
+          reference: countId,
+          subject: item.name,
+          theoretical,
+          declared: countedQuantity,
+          delta,
+          amount: Math.abs(Math.round(delta * (item.weightedAvgCost ?? 0))),
+          actor,
+          resolution: null,
+          resolver: null,
+          createdAt: actor.at,
+        }],
       });
     },
-    [itemsMap, stock, makeEvent, makeMovement, makeAudit],
+    [itemsMap, stock, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const receiveGoods = useCallback<Ctx['receiveGoods']>(
     ({ supplierId: rawSupplierId, locationId: rawLocationId, lines, transportCost, paymentMethod }) => {
-      if (!lines.length) return;
+      const actor = authorize('RECEIVE_GOODS');
+      if (!lines.length || !actor) return;
       const supplierId = resolveId(rawSupplierId);
       const locationId = resolveId(rawLocationId);
       const purchaseId = uuid();
@@ -769,7 +916,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         movements.push(
           makeMovement(
             itemId, locationId, line.quantity, item.unit,
-            'PURCHASE_RECEIPT', 'GoodsReceipt', purchaseId,
+            'PURCHASE_RECEIPT', 'GoodsReceipt', purchaseId, actor,
           ),
         );
 
@@ -803,8 +950,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           transportCost,
           total: goods + transportCost,
           paymentMethod,
-          createdAt: new Date().toISOString(),
-          receivedAt: new Date().toISOString(),
+          createdAt: actor.at,
+          receivedAt: actor.at,
+          actor,
         },
         // §39 — la marchandise entre en stock, le transport est une charge directe.
         expense: {
@@ -814,8 +962,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           description: `Achat — ${supplierName}`,
           supplierId,
           paymentMethod,
-          userId: user?.id ?? 'unknown',
-          createdAt: new Date().toISOString(),
+          userId: actor.userId,
+          createdAt: actor.at,
+          actor,
         },
         events: [
           makeEvent('GOODS_RECEIVED', 'GoodsReceipt', purchaseId, {
@@ -824,6 +973,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
         audit: [
           makeAudit(
+            actor,
             `Réception — ${supplierName}`,
             `${lines.length} ligne(s) · ${goods + transportCost} FCFA`,
             `purchase:${purchaseId.slice(0, 8)}`,
@@ -831,12 +981,14 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
       });
     },
-    [itemsMap, stock, user, makeEvent, makeMovement, makeAudit],
+    [itemsMap, stock, authorize, makeEvent, makeMovement, makeAudit],
   );
 
   const closeCashSession = useCallback<Ctx['closeCashSession']>(
     (countedCash, reason) => {
-      const session = { ...state.cashSession, countedCash, closedAt: new Date().toISOString(), varianceReason: reason };
+      const actor = authorize('MANAGE_CASH_SESSION');
+      if (!actor) return;
+      const session = { ...state.cashSession, countedCash, closedAt: actor.at, varianceReason: reason };
       const expected =
         state.cashSession.openingCash +
         state.sales.filter((s) => s.paymentMethod === 'CASH' && s.status === 'COMPLETED')
@@ -851,18 +1003,129 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
         audit: [
           makeAudit(
+            actor,
             `Clôture shift #${session.shiftNumber} — écart ${variance >= 0 ? '+' : ''}${variance} FCFA`,
             reason ? `motif : ${reason} · en attente manager` : 'sans écart',
           ),
         ],
+        /* Un tiroir qui ne tombe pas juste est une question, pas un constat. */
+        variances: variance !== 0
+          ? [{
+              id: uuid(),
+              source: 'CASH' as const,
+              reference: session.id,
+              subject: `Shift #${session.shiftNumber}`,
+              theoretical: expected,
+              declared: countedCash,
+              delta: variance,
+              amount: Math.abs(variance),
+              actor,
+              resolution: null,
+              resolver: null,
+              createdAt: actor.at,
+            }]
+          : undefined,
       });
     },
-    [state.cashSession, state.sales, makeEvent, makeAudit],
+    [state.cashSession, state.sales, authorize, makeEvent, makeAudit],
   );
 
   const setNotificationStatus = useCallback<Ctx['setNotificationStatus']>((id, status) => {
     dispatch({ type: 'NOTIFICATION_STATUS', id, status });
   }, []);
+
+  /* ------------------------------------------------------ Délégation */
+
+  const grantCapabilities = useCallback<Ctx['grantCapabilities']>(
+    (userId, capabilities) => {
+      const actor = authorize('MANAGE_TEAM');
+      if (!actor || !capabilities.length) return false;
+
+      // Accorder deux fois la même capacité créerait deux accords actifs, donc
+      // deux révocations à faire pour retirer un seul droit.
+      const active = new Set(effectiveCapabilities(state.grants, userId));
+      const fresh = capabilities.filter((c) => !active.has(c));
+      if (!fresh.length) return false;
+
+      const target = USERS.find((u) => u.id === userId);
+      dispatch({
+        type: 'GRANT',
+        grants: fresh.map((capability) => ({
+          id: uuid(),
+          userId,
+          capability,
+          grantedBy: actor.userId,
+          grantedByName: actor.userName,
+          grantedAt: actor.at,
+        })),
+      });
+      dispatch({
+        type: 'COMMIT',
+        audit: [makeAudit(
+          actor,
+          `Accès accordés — ${target?.name ?? 'membre'}`,
+          fresh.map((c) => CAPABILITY_LABEL[c].toLowerCase()).join(', '),
+          `team:${userId.slice(0, 8)}`,
+        )],
+      });
+      return true;
+    },
+    [state.grants, authorize, makeAudit],
+  );
+
+  const revokeCapabilities = useCallback<Ctx['revokeCapabilities']>(
+    (userId, capabilities) => {
+      const actor = authorize('MANAGE_TEAM');
+      if (!actor || !capabilities.length) return false;
+      /*
+       * Personne ne se retire MANAGE_TEAM à soi-même : l'organisation se
+       * retrouverait sans personne pour redonner le droit.
+       */
+      const guarded = capabilities.filter(
+        (c) => !(userId === actor.userId && c === 'MANAGE_TEAM'),
+      );
+      if (!guarded.length) return false;
+
+      const target = USERS.find((u) => u.id === userId);
+      dispatch({ type: 'REVOKE', userId, capabilities: guarded, by: actor });
+      dispatch({
+        type: 'COMMIT',
+        audit: [makeAudit(
+          actor,
+          `Accès retirés — ${target?.name ?? 'membre'}`,
+          guarded.map((c) => CAPABILITY_LABEL[c].toLowerCase()).join(', '),
+          `team:${userId.slice(0, 8)}`,
+        )],
+      });
+      return true;
+    },
+    [authorize, makeAudit],
+  );
+
+  /* --------------------------------------------------- Recouvrement */
+
+  const resolveVariance = useCallback<Ctx['resolveVariance']>(
+    (varianceId, resolution, note) => {
+      const actor = authorize('RESOLVE_VARIANCE');
+      const target = state.variances.find((v) => v.id === varianceId);
+      if (!actor || !target || target.resolution !== null) return false;
+
+      dispatch({ type: 'RESOLVE_VARIANCE', varianceId, resolution, note, by: actor });
+      dispatch({
+        type: 'COMMIT',
+        events: [makeEvent('STOCK_VARIANCE_DETECTED', 'Variance', varianceId, {
+          source: target.source, delta: target.delta, amount: target.amount, resolution, note,
+        })],
+        audit: [makeAudit(
+          actor,
+          `Écart soldé — ${target.subject}`,
+          `${VARIANCE_SOURCE_LABEL[target.source].toLowerCase()} · ${target.amount} FCFA · ${RESOLUTION_LABEL[resolution].toLowerCase()}${note ? ` · ${note}` : ''}`,
+        )],
+      });
+      return true;
+    },
+    [state.variances, authorize, makeEvent, makeAudit],
+  );
 
   /* ------------------------------------------------------- Alertes */
 
@@ -1026,6 +1289,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     state, user, users: USERS, items: itemsMap, stock, online, pending, syncing, lastSyncAt,
+    can, grants: state.grants, variances: state.variances,
+    grantCapabilities, revokeCapabilities, resolveVariance,
     login: (userId) => dispatch({ type: 'LOGIN', userId }),
     logout: () => {
       setRemoteProfile(null);

@@ -1,107 +1,70 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { BunaProvider, useBuna } from './store/BunaStore';
-import { CartProvider } from './screens/CartContext';
-import { getNavForRoles, Sidebar, TabBar } from './design-system/components/navigation';
-import { BunaLockup } from './design-system/components/BunaLogo';
-import { SyncIndicator } from './design-system/components/SyncIndicator';
-import { ROLE_LABEL } from './domain/types';
+import { CartProvider } from './features/vente/CartContext';
+import { AppShell } from './shell/AppShell';
+import { Login } from './shell/Login';
+import { homeFor } from './shell/navigation';
+import { Denied } from './shell/Denied';
+import type { Capability } from './domain/capabilities';
 
-import { Login } from './screens/Login';
-import { Pos } from './screens/seller/Pos';
-import { Cart } from './screens/seller/Cart';
-import { Payment } from './screens/seller/Payment';
-import { Receipt } from './screens/seller/Receipt';
-import { Orders } from './screens/seller/Orders';
-import { Production } from './screens/preparer/Production';
-import { NewBatch } from './screens/preparer/NewBatch';
-import { Stock } from './screens/shared/Stock';
-import { Waste } from './screens/shared/Waste';
-import { Today } from './screens/manager/Today';
-import { Closing } from './screens/manager/Closing';
-import { Cockpit } from './screens/owner/Cockpit';
-import { Replenishment } from './screens/procurement/Replenishment';
-import { Purchase } from './screens/procurement/Purchase';
-import { GoodsReceipt } from './screens/procurement/GoodsReceipt';
-import { Finance } from './screens/finance/Finance';
-import { NewExpense } from './screens/finance/NewExpense';
-import { LocationManager } from './screens/manager/LocationManager';
-import { CatalogManager } from './screens/manager/CatalogManager';
-import { RecipeManager } from './screens/manager/RecipeManager';
-import { Transfer } from './screens/shared/Transfer';
-import { Alerts } from './screens/Alerts';
-import { Catalogue } from './screens/catalogue/Catalogue';
-import { InventoryCount } from './screens/shared/InventoryCount';
-import { Flow } from './screens/Flow';
-import { Profile } from './screens/Profile';
+import { Pos } from './features/vente/screens/Pos';
+import { Cart } from './features/vente/screens/Cart';
+import { Payment } from './features/vente/screens/Payment';
+import { Receipt } from './features/vente/screens/Receipt';
+import { Orders } from './features/vente/screens/Orders';
 
-/** Écrans en plein flux : pas de barre d'onglets, l'utilisateur va au bout de son geste. */
-const FULLSCREEN = [
-  '/vendre/panier', '/vendre/encaissement', '/vendre/recu',
-  '/production/batch', '/stock/perte', '/stock/inventaire', '/stock/transfert',
-  '/cloture', '/achats/nouveau', '/achats/reception', '/finance/nouvelle-depense',
-];
+import { Stock } from './features/stock/screens/Stock';
+import { Waste } from './features/stock/screens/Waste';
+import { Transfer } from './features/stock/screens/Transfer';
+import { InventoryCount } from './features/stock/screens/InventoryCount';
+import { Ecarts } from './features/stock/screens/Ecarts';
 
-import { useAdaptive } from './design-system/hooks/useAdaptive';
+import { Production } from './features/production/screens/Production';
+import { NewBatch } from './features/production/screens/NewBatch';
+import { RecipeManager } from './features/production/screens/RecipeManager';
 
-function Shell() {
-  const { user, logout } = useBuna();
-  const { pathname } = useLocation();
-  const { isMobile } = useAdaptive();
+import { Replenishment } from './features/appro/screens/Replenishment';
+import { Purchase } from './features/appro/screens/Purchase';
+import { GoodsReceipt } from './features/appro/screens/GoodsReceipt';
 
+import { Finance } from './features/finance/screens/Finance';
+import { NewExpense } from './features/finance/screens/NewExpense';
+import { Tresorerie } from './features/finance/screens/Tresorerie';
+import { Closing } from './features/finance/screens/Closing';
+
+import { Dashboard } from './features/pilotage/screens/Dashboard';
+import { Equipe } from './features/pilotage/screens/Equipe';
+import { Journal } from './features/pilotage/screens/Journal';
+import { CatalogManager } from './features/pilotage/screens/CatalogManager';
+import { LocationManager } from './features/pilotage/screens/LocationManager';
+import { Catalogue } from './features/pilotage/screens/Catalogue';
+import { Alertes } from './features/pilotage/screens/Alertes';
+import { Profil } from './features/pilotage/screens/Profil';
+
+/**
+ * Garde de route.
+ *
+ * L'utilisateur ne devrait jamais atteindre un écran qu'il n'a pas le droit
+ * d'ouvrir — la navigation ne le lui propose pas. Mais une URL se tape, se
+ * partage et se met en favori : la garde est ce qui rend cette promesse vraie.
+ *
+ * Elle ne protège rien par elle-même : c'est RLS qui protège. Elle évite
+ * d'afficher une page vide et de laisser croire à une panne.
+ */
+function Guard({ need, children }: { need: Capability[]; children: React.ReactNode }) {
+  const { user } = useBuna();
   if (!user) return <Login />;
-
-  const items = getNavForRoles(user);
-  const immersive = FULLSCREEN.includes(pathname);
-
-  return (
-    <div className="flex min-h-dvh bg-shell">
-      {/* Sidebar is rendered dynamically for desktop only */}
-      {!isMobile && (
-        <Sidebar
-          items={items}
-          brand={<BunaLockup subtitle="OPERATIONS · OS" surface="cafe" size={42} />}
-          footer={
-            <>
-              <div className="border-t border-[#4A362A] pt-4 flex items-center justify-between">
-                <div>
-                  <div className="text-[13.5px] font-medium text-sable-pale">{user.name}</div>
-                  <div className="num mt-0.5 text-[10.5px] tracking-[0.14em] text-[#9E8B77]">
-                    {user.roles.map((r) => ROLE_LABEL[r]).join(' · ').toUpperCase()}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="rounded px-2 py-1 text-[12px] font-medium text-[#B9A895] hover:bg-cafe-soft hover:text-sable-pale transition-colors"
-                >
-                  Déconnexion
-                </button>
-              </div>
-              <SyncIndicator compact />
-            </>
-          }
-        />
-      )}
-
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-        <div
-          className="shell-canvas flex flex-1 flex-col"
-          style={isMobile && !immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
-        >
-          <Outlet />
-        </div>
-        {/* TabBar is rendered dynamically for mobile only, and hidden in immersive mode */}
-        {isMobile && !immersive && <TabBar items={items} />}
-      </div>
-    </div>
-  );
+  if (need.some((c) => user.capabilities.includes(c))) return <>{children}</>;
+  return <Denied need={need} />;
 }
 
-/** Redirige chaque rôle vers son écran d'accueil naturel (§90). */
+const guard = (need: Capability[], element: React.ReactNode) => <Guard need={need}>{element}</Guard>;
+
+/** Chacun atterrit sur ce que ses capacités rendent utile (§ registre). */
 function Home() {
   const { user } = useBuna();
   if (!user) return <Login />;
-  return <Navigate to={getNavForRoles(user)[0].to} replace />;
+  return <Navigate to={homeFor(user.capabilities)} replace />;
 }
 
 export default function App() {
@@ -110,43 +73,50 @@ export default function App() {
       <CartProvider>
         <BrowserRouter>
           <Routes>
-            <Route element={<Shell />}>
+            <Route element={<AppShell />}>
               <Route path="/" element={<Home />} />
 
-              <Route path="/vendre" element={<Pos />} />
-              <Route path="/vendre/panier" element={<Cart />} />
-              <Route path="/vendre/encaissement" element={<Payment />} />
-              <Route path="/vendre/recu" element={<Receipt />} />
-              <Route path="/commandes" element={<Orders />} />
+              {/* Vente */}
+              <Route path="/vente" element={guard(['SELL'], <Pos />)} />
+              <Route path="/vente/panier" element={guard(['SELL'], <Cart />)} />
+              <Route path="/vente/encaissement" element={guard(['SELL'], <Payment />)} />
+              <Route path="/vente/recu" element={guard(['SELL'], <Receipt />)} />
+              <Route path="/vente/historique" element={guard(['SELL', 'VIEW_ALL_SALES'], <Orders />)} />
 
-              <Route path="/production" element={<Production />} />
-              <Route path="/production/batch" element={<NewBatch />} />
+              {/* Stock */}
+              <Route path="/stock" element={guard(['VIEW_STOCK'], <Stock />)} />
+              <Route path="/stock/perte" element={guard(['RECORD_WASTE'], <Waste />)} />
+              <Route path="/stock/transfert" element={guard(['TRANSFER_STOCK'], <Transfer />)} />
+              <Route path="/stock/inventaire" element={guard(['COUNT_INVENTORY'], <InventoryCount />)} />
+              <Route path="/stock/ecarts" element={guard(['RESOLVE_VARIANCE'], <Ecarts />)} />
 
-              <Route path="/stock" element={<Stock />} />
-              <Route path="/stock/perte" element={<Waste />} />
-              <Route path="/stock/inventaire" element={<InventoryCount />} />
-              <Route path="/stock/transfert" element={<Transfer />} />
-              <Route path="/catalogue" element={<Catalogue />} />
-              <Route path="/parcours" element={<Flow />} />
+              {/* Production */}
+              <Route path="/production" element={guard(['PRODUCE'], <Production />)} />
+              <Route path="/production/preparation" element={guard(['PRODUCE'], <NewBatch />)} />
+              <Route path="/production/recettes" element={guard(['EDIT_RECIPE'], <RecipeManager />)} />
 
-              <Route path="/aujourdhui" element={<Today />} />
-              <Route path="/cloture" element={<Closing />} />
-              <Route path="/alertes" element={<Alerts />} />
+              {/* Approvisionnement */}
+              <Route path="/appro" element={guard(['REQUEST_PURCHASE', 'PLACE_ORDER'], <Replenishment />)} />
+              <Route path="/appro/commande" element={guard(['PLACE_ORDER'], <Purchase />)} />
+              <Route path="/appro/reception" element={guard(['RECEIVE_GOODS'], <GoodsReceipt />)} />
 
-              <Route path="/cockpit" element={<Cockpit />} />
-              <Route path="/finance" element={<Finance />} />
-              <Route path="/finance/nouvelle-depense" element={<NewExpense />} />
+              {/* Finance */}
+              <Route path="/finance" element={guard(['RECORD_EXPENSE', 'VIEW_FINANCES'], <Finance />)} />
+              <Route path="/finance/depense" element={guard(['RECORD_EXPENSE'], <NewExpense />)} />
+              <Route path="/finance/tresorerie" element={guard(['VIEW_FINANCES'], <Tresorerie />)} />
+              <Route path="/finance/caisse" element={guard(['MANAGE_CASH_SESSION', 'CLOSE_DAY'], <Closing />)} />
 
-              <Route path="/approvisionnement" element={<Replenishment />} />
-              <Route path="/achats" element={<Replenishment />} />
-              <Route path="/achats/nouveau" element={<Purchase />} />
-              <Route path="/achats/reception" element={<GoodsReceipt />} />
+              {/* Pilotage */}
+              <Route path="/pilotage" element={guard(['VIEW_DASHBOARD'], <Dashboard />)} />
+              <Route path="/pilotage/equipe" element={guard(['MANAGE_TEAM'], <Equipe />)} />
+              <Route path="/pilotage/journal" element={guard(['VIEW_AUDIT_LOG'], <Journal />)} />
+              <Route path="/pilotage/catalogue" element={guard(['MANAGE_CATALOG'], <CatalogManager />)} />
+              <Route path="/pilotage/emplacements" element={guard(['MANAGE_LOCATIONS'], <LocationManager />)} />
 
-              <Route path="/manager/emplacements" element={<LocationManager />} />
-              <Route path="/manager/catalogue" element={<CatalogManager />} />
-              <Route path="/manager/recettes" element={<RecipeManager />} />
+              <Route path="/catalogue" element={guard(['VIEW_STOCK'], <Catalogue />)} />
+              <Route path="/alertes" element={<Alertes />} />
+              <Route path="/moi" element={<Profil />} />
 
-              <Route path="/moi" element={<Profile />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

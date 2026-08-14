@@ -1,4 +1,4 @@
-import type { Item, StockMovement, UUID, Unit } from './types';
+import type { Item, StockMovement, UUID } from './types';
 import { convert } from './units';
 
 /**
@@ -90,13 +90,4 @@ export function replenishmentNeed(quantity: number, item: Item): number {
 
 /* ------------------------------------------------- Théorique vs réel §66 */
 
-export interface Variance { itemId: UUID; theoretical: number; actual: number; delta: number; unit: Unit }
 
-/**
- * Compare la consommation théorique (déduite des recettes × ventes) à la
- * consommation réelle (déduite des mouvements). L'écart est ce que le système
- * doit rendre visible à l'écran, pas enterrer dans un rapport.
- */
-export function consumptionVariance(theoretical: number, actual: number, itemId: UUID, unit: Unit): Variance {
-  return { itemId, theoretical, actual, delta: Math.round((theoretical - actual) * 100) / 100, unit };
-}

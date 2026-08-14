@@ -7,33 +7,36 @@
 
 export type UUID = string;
 
-/* ---------------------------------------------------------------- Rôles */
+/* -------------------------------------------------- Postes et capacités */
 
-export const ROLES = ['OWNER', 'MANAGER', 'PROCUREMENT', 'PREPARER', 'SELLER', 'FINANCE'] as const;
-export type Role = (typeof ROLES)[number];
+/*
+ * Le poste et les capacités vivent dans `capabilities.ts`. Ils sont réexportés
+ * ici parce que la moitié du dépôt lit ses types depuis `types.ts` — mais la
+ * définition reste à un seul endroit.
+ */
+export type { Capability, Post } from './capabilities';
+export { CAPABILITY_LABEL, POST_LABEL, POSTS } from './capabilities';
 
-export const ROLE_LABEL: Record<Role, string> = {
-  OWNER: 'Owner',
-  MANAGER: 'Manager',
-  PROCUREMENT: 'Approvisionneur',
-  PREPARER: 'Préparateur',
-  SELLER: 'Vendeur',
-  FINANCE: 'Finance',
-};
+import type { Capability, Post } from './capabilities';
+import type { Actor } from './actor';
 
 export interface User {
   id: UUID;
   organizationId: UUID;
   name: string;
-  /** A user can hold multiple roles (e.g. Baboy is Manager + Preparer + Procurement). */
-  roles: Role[];
+  /**
+   * Le poste : une identité sociale, stable et unique. Il ne détermine pas
+   * l'accès — il ne fait qu'en proposer un jeu de départ à la création.
+   */
+  post: Post;
+  /**
+   * Ce que la personne a effectivement le droit de faire, ici et maintenant.
+   * Accordé par quelqu'un, révocable, et revalidé côté serveur : c'est RLS qui
+   * protège, pas cette liste.
+   */
+  capabilities: Capability[];
   siteId: UUID;
   status: 'ACTIVE' | 'DISABLED';
-}
-
-/** Backward-compatible helper: returns the first (primary) role for display. */
-export function primaryRole(user: User): Role {
-  return user.roles[0] ?? 'SELLER';
 }
 
 /* ------------------------------------------------------- Sites & stocks */
@@ -132,6 +135,8 @@ export interface StockMovement {
   userId: UUID;
   deviceId: string;
   createdAt: string;
+  /** Qui a produit ce mouvement, et sous quelle capacité. */
+  actor: Actor;
 }
 
 /* ------------------------------------------------------ Événements métier */
@@ -215,6 +220,8 @@ export interface Sale {
   voidReason?: string;
   voidedBy?: UUID;
   createdAt: string;
+  /** Le vendeur, nommé. `sellerId` reste la colonne, `actor` est ce qu'on lit. */
+  actor: Actor;
 }
 
 /* ------------------------------------------------------------ Production */
@@ -231,6 +238,7 @@ export interface ProductionBatch {
   lossQuantity: number;
   startedAt: string;
   completedAt: string | null;
+  actor: Actor;
 }
 
 /* ------------------------------------------------------------- Caisse */
@@ -269,6 +277,8 @@ export interface Purchase {
   paymentMethod: PaymentMethod;
   createdAt: string;
   receivedAt: string | null;
+  /** L'achat n'avait aucun auteur jusqu'ici — l'opération la plus sensible du lot. */
+  actor: Actor;
 }
 
 export interface PriceObservation {
@@ -299,6 +309,7 @@ export interface Expense {
   paymentMethod: PaymentMethod;
   userId: UUID;
   createdAt: string;
+  actor: Actor;
 }
 
 /* --------------------------------------------------------- Gaspillage */
@@ -320,6 +331,7 @@ export interface WasteEvent {
   reason: WasteReason;
   userId: UUID;
   createdAt: string;
+  actor: Actor;
 }
 
 /* --------------------------------------------------------- Inventaire */
@@ -333,6 +345,7 @@ export interface InventoryCount {
   lines: InventoryCountLine[];
   status: 'DRAFT' | 'VALIDATED';
   createdAt: string;
+  actor: Actor;
 }
 
 /* ------------------------------------------------------- Notifications */
@@ -349,7 +362,11 @@ export interface Notification {
   /** §48 — une notification propose l'action, elle ne décrit pas seulement le problème. */
   actionLabel?: string;
   actionTarget?: string;
-  recipientRoles: Role[];
+  /**
+   * Qui doit la voir — décrit par ce qu'il faut pouvoir faire pour y répondre,
+   * pas par un rôle. Une alerte de rupture va à ceux qui peuvent commander.
+   */
+  recipientCapabilities: Capability[];
   createdAt: string;
 }
 
@@ -357,9 +374,8 @@ export interface Notification {
 
 export interface AuditEvent {
   id: UUID;
-  userId: UUID;
-  userName: string;
-  role: Role;
+  /** Nom, poste, appareil et capacité mobilisée — tout est dans le tampon. */
+  actor: Actor;
   action: string;
   detail: string;
   reference?: string;

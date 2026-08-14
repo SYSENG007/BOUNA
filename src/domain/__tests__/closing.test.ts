@@ -6,6 +6,17 @@ import {
   reopenDay, revertStep, salesReconciliationView, startClosing, stockVarianceView,
   type ClosingContext, type ClosingContextInput, type ClosingSession, type DayClosure,
 } from '../closing';
+import { POST_PRESET } from '../capabilities';
+import { TEST_ACTOR } from './actors';
+
+/*
+ * Les acteurs de la clôture ne sont plus des rôles mais des jeux de capacités.
+ * On part des préréglages de poste : c'est exactement ce qu'un compte reçoit à
+ * sa création, donc le cas le plus représentatif du terrain.
+ */
+const OWNER_ACTOR = { id: 'u-bouna', post: 'OWNER' as const, capabilities: POST_PRESET.OWNER };
+const MANAGER_ACTOR = { id: 'u-mariama', post: 'MANAGER' as const, capabilities: POST_PRESET.MANAGER };
+const SELLER_ACTOR = { id: 'u-aicha', post: 'SELLER' as const, capabilities: POST_PRESET.SELLER };
 
 /**
  * §37 — les cinq étapes de la clôture, et RULE-009.
@@ -48,6 +59,7 @@ const sale = (over: Partial<Sale>): Sale => ({
   amountReceived: 2500,
   status: 'COMPLETED',
   createdAt: t('11:00:00'),
+  actor: TEST_ACTOR,
   ...over,
 });
 
@@ -62,11 +74,11 @@ const SALES: Sale[] = [
 const EXPENSES: Expense[] = [
   {
     id: 'ex-1', amount: 10_000, category: 'TRANSPORT', description: 'Transport marché → cuisine',
-    paymentMethod: 'CASH', userId: 'u-fatou', createdAt: t('08:30:00'),
+    paymentMethod: 'CASH', userId: 'u-fatou', createdAt: t('08:30:00'), actor: TEST_ACTOR,
   },
   {
     id: 'ex-2', amount: 18_000, category: 'ENERGIE', description: 'Recharge électricité',
-    paymentMethod: 'MOBILE_MONEY', userId: 'u-fatou', createdAt: t('09:00:00'),
+    paymentMethod: 'MOBILE_MONEY', userId: 'u-fatou', createdAt: t('09:00:00'), actor: TEST_ACTOR,
   },
 ];
 
@@ -74,7 +86,7 @@ const mv = (over: Partial<StockMovement>): StockMovement => ({
   id: `m-${Math.random()}`, organizationId: 'org', siteId: SITE, locationId: 'loc-cuisine',
   itemId: LAIT.id, quantity: 0, unit: 'L', movementType: 'INITIAL',
   referenceType: 'Seed', referenceId: 'r', userId: 'u', deviceId: 'd',
-  createdAt: t('06:00:00'), ...over,
+  createdAt: t('06:00:00'), actor: TEST_ACTOR, ...over,
 });
 
 /* Théorique du lait : 20 reçus − 3 consommés − 1 jeté = 16 L. */
@@ -91,7 +103,7 @@ const ctxOf = (over: Partial<ClosingContextInput> = {}): ClosingContext =>
   closingContext({
     siteId: SITE,
     businessDate: DAY,
-    actor: { id: 'u-mariama', role: 'MANAGER' },
+    actor: MANAGER_ACTOR,
     now: t('21:00:00'),
     items: [LAIT, LATTE],
     sales: SALES,
@@ -418,7 +430,7 @@ describe('Séquence des cinq étapes', () => {
   });
 
   it('un vendeur ne clôture pas la journée', () => {
-    const ctx = ctxOf({ actor: { id: 'u-aicha', role: 'SELLER' } });
+    const ctx = ctxOf({ actor: SELLER_ACTOR });
     const out = completeStep(walkToValidation(ctx), ctx, { step: 'FINAL_VALIDATION', confirmed: true });
     expect(out.ok === false && out.error).toBe('FORBIDDEN');
   });
@@ -510,7 +522,7 @@ describe('RULE-009 — réouverture explicite par un OWNER', () => {
   it('rouvre, puis la vente du jour repasse', () => {
     const closure = closeTheDay();
     const out = reopenDay(DAY, SITE, ledger(closure), {
-      actor: { id: 'u-bouna', role: 'OWNER' },
+      actor: OWNER_ACTOR,
       reason: motif,
       at: '2026-08-14T08:00:00',
     });
@@ -525,7 +537,7 @@ describe('RULE-009 — réouverture explicite par un OWNER', () => {
   it('garde la trace : événement, audit, motif et auteur', () => {
     const closure = closeTheDay();
     const out = reopenDay(DAY, SITE, ledger(closure), {
-      actor: { id: 'u-bouna', role: 'OWNER' }, reason: motif,
+      actor: OWNER_ACTOR, reason: motif,
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -534,14 +546,14 @@ describe('RULE-009 — réouverture explicite par un OWNER', () => {
     expect(out.audit[0].detail).toContain(motif);
     // La clôture n'est pas effacée : la réouverture s'y ajoute.
     expect(out.closure.reopenings).toHaveLength(1);
-    expect(out.closure.reopenings[0]).toMatchObject({ reopenedBy: 'u-bouna', role: 'OWNER', reason: motif });
+    expect(out.closure.reopenings[0]).toMatchObject({ reopenedBy: 'u-bouna', post: 'OWNER', reason: motif });
     expect(out.closure.record.revenue).toBe(120_000);
   });
 
   it('refuse la réouverture à un manager', () => {
     const closure = closeTheDay();
     const out = reopenDay(DAY, SITE, ledger(closure), {
-      actor: { id: 'u-mariama', role: 'MANAGER' }, reason: motif,
+      actor: MANAGER_ACTOR, reason: motif,
     });
     expect(out.ok).toBe(false);
     if (out.ok) return;
@@ -552,14 +564,14 @@ describe('RULE-009 — réouverture explicite par un OWNER', () => {
   it('refuse la réouverture sans motif', () => {
     const closure = closeTheDay();
     const out = reopenDay(DAY, SITE, ledger(closure), {
-      actor: { id: 'u-bouna', role: 'OWNER' }, reason: '  ',
+      actor: OWNER_ACTOR, reason: '  ',
     });
     expect(out.ok === false && out.error).toBe('REASON_REQUIRED');
   });
 
   it('refuse de rouvrir une journée qui n’a jamais été clôturée', () => {
     const out = reopenDay(DAY, SITE, { closures: [] }, {
-      actor: { id: 'u-bouna', role: 'OWNER' }, reason: motif,
+      actor: OWNER_ACTOR, reason: motif,
     });
     expect(out.ok === false && out.error).toBe('DAY_NOT_LOCKED');
   });
@@ -567,7 +579,7 @@ describe('RULE-009 — réouverture explicite par un OWNER', () => {
   it('une journée rouverte puis reclôturée redevient verrouillée', () => {
     const closure = closeTheDay();
     const reopened = reopenDay(DAY, SITE, ledger(closure), {
-      actor: { id: 'u-bouna', role: 'OWNER' }, reason: motif,
+      actor: OWNER_ACTOR, reason: motif,
     });
     expect(reopened.ok).toBe(true);
     if (!reopened.ok) return;

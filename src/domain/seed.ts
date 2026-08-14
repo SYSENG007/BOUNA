@@ -2,6 +2,10 @@ import type {
   CashSession, Expense, Item, Purchase, Recipe, RecipeVersion, Site,
   StockLocation, StockMovement, Supplier, User, AuditEvent, Notification,
 } from './types';
+import type { Capability, Post } from './capabilities';
+import { POST_PRESET } from './capabilities';
+import type { Actor } from './actor';
+import type { CapabilityGrant } from './capabilities';
 
 /**
  * Jeu de données de démonstration — Coffee Bar Auchan, mardi 12 août.
@@ -26,12 +30,42 @@ export const LOCATIONS: StockLocation[] = [
   { id: LOC.POS, siteId: SITE.id, name: 'Coffee Bar Auchan', type: 'POS' },
 ];
 
+/**
+ * Chacun a un poste et un jeu de capacités. Baboy portait trois rôles pour
+ * pouvoir préparer et réceptionner ; il n'en a plus besoin — son poste est
+ * manager, et ses capacités couvrent le terrain.
+ *
+ * Ibou est l'exemple qui a motivé la refonte : vendeur, mais il réceptionne le
+ * mardi matin. On lui a donc accordé RECEIVE_GOODS en plus de son préréglage.
+ */
+const seedUser = (
+  id: string, name: string, post: Post, extra: Capability[] = [],
+): User => ({
+  id, organizationId: ORG_ID, name, post,
+  capabilities: [...new Set<Capability>([...POST_PRESET[post], ...extra])],
+  siteId: SITE.id, status: 'ACTIVE',
+});
+
 export const USERS: User[] = [
-  { id: 'u-baboy', organizationId: ORG_ID, name: 'Baboy', roles: ['MANAGER', 'PREPARER', 'PROCUREMENT'], siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-matel', organizationId: ORG_ID, name: 'Matel', roles: ['MANAGER'], siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-maty', organizationId: ORG_ID, name: 'Maty', roles: ['FINANCE'], siteId: SITE.id, status: 'ACTIVE' },
-  { id: 'u-ibou', organizationId: ORG_ID, name: 'Ibou', roles: ['SELLER'], siteId: SITE.id, status: 'ACTIVE' },
+  seedUser('u-bouna', 'Bouna', 'OWNER'),
+  seedUser('u-baboy', 'Baboy', 'MANAGER'),
+  seedUser('u-matel', 'Matel', 'MANAGER'),
+  seedUser('u-maty', 'Maty', 'FINANCE'),
+  seedUser('u-ibou', 'Ibou', 'SELLER', ['RECEIVE_GOODS', 'COUNT_INVENTORY']),
 ];
+
+/** Tampon d'auteur pour les faits de démonstration. */
+function seedActor(userId: string, under: Capability, at: string): Actor {
+  const u = USERS.find((x) => x.id === userId);
+  return {
+    userId,
+    userName: u?.name ?? 'Inconnu',
+    post: u?.post ?? 'SELLER',
+    under,
+    deviceId: 'seed',
+    at,
+  };
+}
 
 export const SUPPLIERS: Supplier[] = [
   { id: 'sup-laiterie', name: 'Laiterie du Terroir', phone: '77 812 44 10', contact: 'M. Sarr' },
@@ -123,9 +157,10 @@ export const SEED_MOVEMENTS: StockMovement[] = [
   movementType: 'INITIAL' as const,
   referenceType: 'SEED',
   referenceId: 'seed',
-  userId: 'u-awa',
+  userId: 'u-baboy',
   deviceId: 'seed',
   createdAt: iso(12),
+  actor: seedActor('u-baboy', 'COUNT_INVENTORY', iso(12)),
 }));
 
 export const SEED_CASH_SESSION: CashSession = {
@@ -140,11 +175,11 @@ export const SEED_CASH_SESSION: CashSession = {
 };
 
 export const SEED_EXPENSES: Expense[] = [
-  { id: 'ex-1', amount: 22000, category: 'MATIERE', description: 'Achat lait — Laiterie du Terroir', supplierId: 'sup-laiterie', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(11) },
-  { id: 'ex-2', amount: 14000, category: 'EMBALLAGE', description: 'Gobelets 16 oz × 500', supplierId: 'sup-emballage', paymentMethod: 'MOBILE_MONEY', userId: 'u-baboy', createdAt: iso(10) },
-  { id: 'ex-3', amount: 14000, category: 'TRANSPORT', description: 'Transport marché → cuisine', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(8) },
-  { id: 'ex-4', amount: 18000, category: 'ENERGIE', description: 'Recharge électricité', paymentMethod: 'MOBILE_MONEY', userId: 'u-matel', createdAt: iso(5) },
-  { id: 'ex-5', amount: 10000, category: 'MATIERE', description: 'Glace — appoint', paymentMethod: 'CASH', userId: 'u-ibou', createdAt: iso(2) },
+  { id: 'ex-1', amount: 22000, category: 'MATIERE', description: 'Achat lait — Laiterie du Terroir', supplierId: 'sup-laiterie', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(11), actor: seedActor('u-baboy', 'RECORD_EXPENSE', iso(11)) },
+  { id: 'ex-2', amount: 14000, category: 'EMBALLAGE', description: 'Gobelets 16 oz × 500', supplierId: 'sup-emballage', paymentMethod: 'MOBILE_MONEY', userId: 'u-baboy', createdAt: iso(10), actor: seedActor('u-baboy', 'RECORD_EXPENSE', iso(10)) },
+  { id: 'ex-3', amount: 14000, category: 'TRANSPORT', description: 'Transport marché → cuisine', paymentMethod: 'CASH', userId: 'u-baboy', createdAt: iso(8), actor: seedActor('u-baboy', 'RECORD_EXPENSE', iso(8)) },
+  { id: 'ex-4', amount: 18000, category: 'ENERGIE', description: 'Recharge électricité', paymentMethod: 'MOBILE_MONEY', userId: 'u-matel', createdAt: iso(5), actor: seedActor('u-matel', 'RECORD_EXPENSE', iso(5)) },
+  { id: 'ex-5', amount: 10000, category: 'MATIERE', description: 'Glace — appoint', paymentMethod: 'CASH', userId: 'u-ibou', createdAt: iso(2), actor: seedActor('u-ibou', 'RECORD_EXPENSE', iso(2)) },
 ];
 
 export const SEED_PURCHASES: Purchase[] = [
@@ -157,33 +192,52 @@ export const SEED_PURCHASES: Purchase[] = [
     ],
     transportCost: 2000, total: 52900, paymentMethod: 'CASH',
     createdAt: iso(11), receivedAt: iso(11),
+    actor: seedActor('u-baboy', 'RECEIVE_GOODS', iso(11)),
   },
 ];
 
 export const SEED_AUDIT: AuditEvent[] = [
-  { id: 'au-1', userId: 'u-ibou', userName: 'Ibou', role: 'SELLER', action: 'Vente #453 — 5 000 FCFA', detail: '2 Vanilla Iced Coffee · Espèces', reference: 'sale:453', createdAt: iso(3) },
-  { id: 'au-2', userId: 'u-matel', userName: 'Matel', role: 'MANAGER', action: 'Annulation vente #453', detail: 'motif : erreur de saisie · validée', reference: 'sale:453', createdAt: iso(2.7) },
-  { id: 'au-3', userId: 'u-baboy', userName: 'Baboy', role: 'PREPARER', action: 'Batch #B-20260812-04', detail: '27/30 unités · rendement 90 %', reference: 'batch:04', createdAt: iso(2.5) },
-  { id: 'au-4', userId: 'u-baboy', userName: 'Baboy', role: 'PREPARER', action: 'Transfert vers Coffee Bar Auchan', detail: '18 unités Vanilla · 9 conservées au froid', reference: 'transfer:12', createdAt: iso(2.2) },
+  { id: 'au-1', actor: seedActor('u-ibou', 'SELL', iso(3)), action: 'Vente #453 — 5 000 FCFA', detail: '2 Vanilla Iced Coffee · Espèces', reference: 'sale:453', createdAt: iso(3) },
+  { id: 'au-2', actor: seedActor('u-matel', 'VOID_SALE', iso(2.7)), action: 'Annulation vente #453', detail: 'motif : erreur de saisie · validée', reference: 'sale:453', createdAt: iso(2.7) },
+  { id: 'au-3', actor: seedActor('u-baboy', 'PRODUCE', iso(2.5)), action: 'Batch #B-20260812-04', detail: '27/30 unités · rendement 90 %', reference: 'batch:04', createdAt: iso(2.5) },
+  { id: 'au-4', actor: seedActor('u-baboy', 'TRANSFER_STOCK', iso(2.2)), action: 'Transfert vers Coffee Bar Auchan', detail: '18 unités Vanilla · 9 conservées au froid', reference: 'transfer:12', createdAt: iso(2.2) },
 ];
 
 export const SEED_NOTIFICATIONS: Notification[] = [
   {
     id: 'nt-1', title: 'Stock de lait faible', body: '6,2 L en frigo · rupture estimée demain 16 h',
     severity: 'ACTION_REQUIRED', status: 'UNREAD',
-    actionLabel: 'Ajouter 24 L au bon', actionTarget: '/achats',
-    recipientRoles: ['PROCUREMENT', 'MANAGER', 'OWNER'], createdAt: iso(1),
+    actionLabel: 'Ajouter 24 L au bon', actionTarget: '/appro',
+    recipientCapabilities: ['REQUEST_PURCHASE', 'PLACE_ORDER'], createdAt: iso(1),
   },
   {
     id: 'nt-2', title: 'Production Vanilla insuffisante', body: '18 unités pour 25 ventes attendues 18–20 h',
     severity: 'ACTION_REQUIRED', status: 'UNREAD',
-    actionLabel: 'Lancer un batch de 20', actionTarget: '/production/batch',
-    recipientRoles: ['PREPARER', 'MANAGER'], createdAt: iso(0.6),
+    actionLabel: 'Lancer un batch de 20', actionTarget: '/production/preparation',
+    recipientCapabilities: ['PRODUCE'], createdAt: iso(0.6),
   },
   {
     id: 'nt-3', title: 'Prix du lait +9 % vs dernier achat', body: '1 100 FCFA/L contre 1 010 FCFA/L · Laiterie du Terroir',
     severity: 'ATTENTION', status: 'UNREAD',
-    actionLabel: 'Comparer les fournisseurs', actionTarget: '/achats',
-    recipientRoles: ['MANAGER', 'OWNER', 'PROCUREMENT'], createdAt: iso(9),
+    actionLabel: 'Comparer les fournisseurs', actionTarget: '/appro',
+    recipientCapabilities: ['MANAGE_SUPPLIERS', 'PLACE_ORDER'], createdAt: iso(9),
   },
 ];
+
+/**
+ * Le journal des délégations au démarrage.
+ *
+ * Chaque capacité d'un compte est un accord daté, signé par le propriétaire.
+ * Ce n'est pas de la décoration : c'est ce que l'écran Équipe lit et modifie,
+ * et ce qui rend « qui a donné ce droit à Ibou ? » répondable.
+ */
+export const SEED_GRANTS: CapabilityGrant[] = USERS.flatMap((u) =>
+  u.capabilities.map((capability) => ({
+    id: `gr-${u.id}-${capability}`,
+    userId: u.id,
+    capability,
+    grantedBy: 'u-bouna',
+    grantedByName: 'Bouna',
+    grantedAt: iso(72),
+  })),
+);

@@ -1,9 +1,8 @@
 import type {
   AuditEvent, CashSession, DomainEvent, Expense, Item, Notification, ProductionBatch,
-  Purchase, Role, Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
+  Purchase,  Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
   WasteEvent,
 } from '../domain/types';
-import { primaryRole } from '../domain/types';
 import { supabase } from './supabase';
 import {
   mapAudit, mapBatch, mapCashSession, mapDomainEvent, mapExpense, mapItem, mapLocation,
@@ -143,7 +142,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
   }
 
   const mappedSales = sales.rows.map(mapSale);
-  const viewerRole: Role = primaryRole(profile);
+  const viewerCapabilities = profile.capabilities;
 
   return {
     organizationId: orgId,
@@ -159,7 +158,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     batches: batches.rows.map(mapBatch),
     purchases: purchases.rows.map(mapPurchase),
     cashSession: cashSessions.rows.length ? mapCashSession(cashSessions.rows[0]) : null,
-    notifications: notifications.rows.map((r) => mapNotification(r, viewerRole)),
+    notifications: notifications.rows.map((r) => mapNotification(r, viewerCapabilities)),
     audit: audit.rows.map(mapAudit),
     events: events.rows.map(mapDomainEvent),
     saleCounter: mappedSales.reduce((max, s) => Math.max(max, s.number), 0),

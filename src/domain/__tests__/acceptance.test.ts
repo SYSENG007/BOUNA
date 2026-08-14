@@ -5,6 +5,7 @@ import {
 import { convert } from '../units';
 import type { Item, StockMovement } from '../types';
 import { fcfa } from '../money';
+import { TEST_ACTOR } from './actors';
 
 /**
  * §107 — Critical Acceptance Tests.
@@ -19,7 +20,7 @@ const milk: Item = {
 const mv = (over: Partial<StockMovement>): StockMovement => ({
   id: 'm', organizationId: 'o', siteId: 's', locationId: 'loc-a', itemId: 'it-lait',
   quantity: 0, unit: 'L', movementType: 'INITIAL', referenceType: 'T', referenceId: 'r',
-  userId: 'u', deviceId: 'd', createdAt: '2026-08-12T10:00:00Z', ...over,
+  userId: 'u', deviceId: 'd', createdAt: '2026-08-12T10:00:00Z', actor: TEST_ACTOR, ...over,
 });
 
 describe('RULE-002 — le stock est une projection des mouvements', () => {

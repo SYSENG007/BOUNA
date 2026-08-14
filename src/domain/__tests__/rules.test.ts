@@ -23,7 +23,7 @@ describe('§44 — la règle propose une action, pas un constat', () => {
     expect(notifications[0].severity).toBe('ACTION_REQUIRED');
     // Cible 25 − stock 5 = 20 L à acheter.
     expect(notifications[0].actionLabel).toContain('20 L');
-    expect(notifications[0].recipientRoles).toContain('PROCUREMENT');
+    expect(notifications[0].recipientCapabilities).toContain('REQUEST_PURCHASE');
   });
 
   it('ne déclenche rien au-dessus des seuils', () => {

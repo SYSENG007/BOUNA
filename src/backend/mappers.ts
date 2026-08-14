@@ -1,12 +1,14 @@
 import {
-  MOVEMENT_TYPES, ROLES, UNIT_BASE,
+  MOVEMENT_TYPES, UNIT_BASE,
   type AuditEvent, type CashSession, type DomainEvent, type EventType, type Expense,
   type Item, type ItemKind, type LocationType, type MovementType, type Notification,
-  type PaymentMethod, type ProductionBatch, type Purchase, type PurchaseLine, type Role,
+  type PaymentMethod, type ProductionBatch, type Purchase, type PurchaseLine,
   type Sale, type SaleLine, type SaleStatus, type Severity, type Site, type StockLocation,
   type StockMovement, type Supplier, type Unit, type User, type UUID, type WasteEvent,
   type WasteReason,
 } from '../domain/types';
+import { CAPABILITIES, POSTS, type Capability, type Post } from '../domain/capabilities';
+import { UNKNOWN_ACTOR, type Actor } from '../domain/actor';
 
 /**
  * Traduction PostgreSQL → domaine.
@@ -87,7 +89,8 @@ const UNITS = new Set(Object.keys(UNIT_BASE));
 const KINDS = new Set<string>(['RAW_MATERIAL', 'PACKAGING', 'INTERMEDIATE', 'FINISHED']);
 const LOCATION_TYPES = new Set<string>(['CENTRAL', 'KITCHEN', 'FRIDGE', 'POS', 'RESERVE']);
 const MOVEMENTS = new Set<string>(MOVEMENT_TYPES);
-const ROLE_SET = new Set<string>(ROLES);
+const POST_SET = new Set<string>(POSTS);
+const CAPABILITY_SET = new Set<string>(CAPABILITIES);
 const SEVERITIES = new Set<string>(['INFO', 'ATTENTION', 'ACTION_REQUIRED', 'CRITICAL']);
 const PAYMENTS = new Set<string>(['CASH', 'MOBILE_MONEY', 'CARD', 'OTHER']);
 const WASTE_REASONS = new Set<string>(['CASSE', 'PERIME', 'SURDOSAGE', 'BATCH_RATE', 'INVENDU', 'INCONNU']);
@@ -108,8 +111,51 @@ export function movementType(value: unknown): MovementType {
   return MOVEMENTS.has(str(value)) ? (value as MovementType) : 'ADJUSTMENT';
 }
 
-export function role(value: unknown): Role {
-  return ROLE_SET.has(str(value)) ? (value as Role) : 'SELLER';
+export function post(value: unknown): Post {
+  return POST_SET.has(str(value)) ? (value as Post) : 'SELLER';
+}
+
+export function capability(value: unknown): Capability | null {
+  return CAPABILITY_SET.has(str(value)) ? (value as Capability) : null;
+}
+
+/**
+ * Capacités issues de la jointure `user_capabilities`.
+ *
+ * Une ligne révoquée reste en base — c'est le journal des délégations — mais
+ * elle n'accorde plus rien. Filtrer sur `revoked_at` est donc obligatoire ici,
+ * et pas seulement côté SQL : la même requête sert au journal.
+ */
+export function capabilitiesOf(value: unknown): Capability[] {
+  if (!Array.isArray(value)) return [];
+  const out = new Set<Capability>();
+  for (const raw of value) {
+    const row = raw as Row;
+    if (row?.revoked_at) continue;
+    const c = capability(row?.capability);
+    if (c) out.add(c);
+  }
+  return [...out];
+}
+
+/**
+ * Reconstitue le tampon d'auteur depuis les colonnes de la ligne.
+ *
+ * Les faits antérieurs à la traçabilité n'en portent pas : plutôt que de
+ * fabriquer un auteur plausible, on rend `UNKNOWN_ACTOR`, que l'écran affiche
+ * comme « auteur inconnu ». Une trace inventée est pire qu'une trace absente.
+ */
+export function mapActor(row: Row, fallbackAt?: string): Actor {
+  const userId = optStr(row.actor_user_id) ?? optStr(row.user_id);
+  if (!userId) return { ...UNKNOWN_ACTOR, at: fallbackAt ?? '' };
+  return {
+    userId,
+    userName: str(row.actor_user_name, '—'),
+    post: post(row.actor_post),
+    under: capability(row.actor_capability) ?? 'VIEW_STOCK',
+    deviceId: str(row.device_id, 'inconnu'),
+    at: optIso(row.actor_at) ?? fallbackAt ?? iso(row.created_at),
+  };
 }
 
 export function severity(value: unknown): Severity {
@@ -158,7 +204,8 @@ export function mapProfile(row: Row): User {
     id: str(row.id),
     organizationId: str(row.organization_id),
     name: str(row.name, '—'),
-    roles: [role(row.role)],
+    post: post(row.post),
+    capabilities: capabilitiesOf(row.user_capabilities),
     siteId: str(row.site_id),
     status: str(row.status) === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
   };
@@ -205,6 +252,7 @@ export function mapMovement(row: Row): StockMovement {
     userId: str(row.user_id),
     deviceId: str(row.device_id, 'serveur'),
     createdAt: iso(row.created_at),
+    actor: mapActor(row),
   };
 }
 
@@ -250,6 +298,7 @@ export function mapSale(row: Row): Sale {
     voidReason: optStr(row.void_reason),
     voidedBy: optStr(row.voided_by),
     createdAt: iso(row.created_at),
+    actor: mapActor(row),
   };
 }
 
@@ -291,6 +340,7 @@ export function mapPurchase(row: Row): Purchase {
     paymentMethod: paymentMethod(row.payment_method),
     createdAt: iso(row.created_at),
     receivedAt: optIso(row.received_at),
+    actor: mapActor(row),
   };
 }
 
@@ -307,6 +357,7 @@ export function mapBatch(row: Row): ProductionBatch {
     lossQuantity: num(row.loss_quantity),
     startedAt: iso(row.started_at),
     completedAt: optIso(row.completed_at),
+    actor: mapActor(row, iso(row.started_at)),
   };
 }
 
@@ -322,6 +373,7 @@ export function mapExpense(row: Row): Expense {
     paymentMethod: paymentMethod(row.payment_method),
     userId: str(row.user_id),
     createdAt: iso(row.created_at),
+    actor: mapActor(row),
   };
 }
 
@@ -336,6 +388,7 @@ export function mapWaste(row: Row): WasteEvent {
     reason: wasteReason(row.reason),
     userId: str(row.user_id),
     createdAt: iso(row.created_at),
+    actor: mapActor(row),
   };
 }
 
@@ -366,9 +419,14 @@ export function mapDomainEvent(row: Row): DomainEvent {
 export function mapAudit(row: Row): AuditEvent {
   return {
     id: str(row.id),
-    userId: str(row.user_id),
-    userName: str(row.user_name, '—'),
-    role: role(row.role),
+    actor: {
+      userId: str(row.user_id, 'unknown'),
+      userName: str(row.user_name, '—'),
+      post: post(row.post ?? row.role),
+      under: capability(row.capability) ?? 'VIEW_AUDIT_LOG',
+      deviceId: str(row.device_id, 'inconnu'),
+      at: iso(row.created_at),
+    },
     action: str(row.action, '—'),
     detail: str(row.detail),
     reference: optStr(row.reference),
@@ -385,7 +443,7 @@ export function mapAudit(row: Row): AuditEvent {
  * Le statut n'est pas stocké : il se déduit des horodatages, du plus engageant
  * au moins engageant.
  */
-export function mapNotification(row: Row, viewerRole: Role): Notification {
+export function mapNotification(row: Row, viewerCapabilities: readonly Capability[]): Notification {
   const status: Notification['status'] = row.resolved_at
     ? 'RESOLVED'
     : row.acknowledged_at
@@ -402,7 +460,12 @@ export function mapNotification(row: Row, viewerRole: Role): Notification {
     status,
     actionLabel: optStr(row.action_type),
     actionTarget: optStr(row.action_target),
-    recipientRoles: [viewerRole],
+    /*
+     * La base adresse à une personne ; le domaine raisonne en capacités. La
+     * ligne est déjà filtrée par RLS pour ce lecteur — on lui rend donc ses
+     * propres capacités plutôt que d'inventer une cible.
+     */
+    recipientCapabilities: [...viewerCapabilities],
     createdAt: iso(row.created_at),
   };
 }

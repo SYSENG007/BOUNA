@@ -1,10 +1,11 @@
 import type {
-  CashSession, EventType, Expense, Item, MovementType, PaymentMethod, Role, Sale,
+  CashSession, EventType, Expense, Item, MovementType, PaymentMethod, Sale,
   StockMovement, Unit, UUID, WasteReason,
 } from './types';
 import { EXPENSE_LABEL, PAYMENT_LABEL, WASTE_LABEL } from './types';
 import { stockAt } from './stock';
-import { can } from './permissions';
+import type { Capability, Post } from './capabilities';
+import { holds } from './capabilities';
 import { uuid } from './ids';
 import { fcfa } from './money';
 import { formatQty } from './units';
@@ -91,8 +92,8 @@ export interface ClosingPolicy {
   dayStartHour: number;
   /** Un motif d'un seul caractère n'est pas un motif. */
   minReasonLength: number;
-  /** RULE-009 — qui peut rouvrir une journée verrouillée. */
-  reopenRoles: readonly Role[];
+  /** RULE-009 — la capacité qui autorise à rouvrir une journée verrouillée. */
+  reopenCapability: Capability;
 }
 
 export const DEFAULT_CLOSING_POLICY: ClosingPolicy = {
@@ -101,7 +102,7 @@ export const DEFAULT_CLOSING_POLICY: ClosingPolicy = {
   stockToleranceFcfa: 1000,
   dayStartHour: 0,
   minReasonLength: 4,
-  reopenRoles: ['OWNER'],
+  reopenCapability: 'REOPEN_DAY',
 };
 
 /* ----------------------------------------------------------- Intentions */
@@ -147,7 +148,7 @@ export interface AuditDraft {
 export interface DayReopening {
   id: UUID;
   reopenedBy: UUID;
-  role: Role;
+  post: Post;
   reason: string;
   reopenedAt: string;
 }
@@ -261,7 +262,7 @@ export function lockNotice(
 /* ------------------------------------------------------------ Réouverture */
 
 export interface ReopenRequest {
-  actor: { id: UUID; role: Role };
+  actor: { id: UUID; post: Post; capabilities: readonly Capability[] };
   reason: string;
   at?: string;
 }
@@ -293,7 +294,7 @@ export function reopenDay(
     };
   }
 
-  if (!policy.reopenRoles.includes(request.actor.role)) {
+  if (!holds(request.actor.capabilities, policy.reopenCapability)) {
     return {
       ok: false,
       error: 'FORBIDDEN',
@@ -314,7 +315,7 @@ export function reopenDay(
   const reopening: DayReopening = {
     id: uuid(),
     reopenedBy: request.actor.id,
-    role: request.actor.role,
+    post: request.actor.post,
     reason,
     reopenedAt: at,
   };
@@ -479,7 +480,7 @@ const isDone = (session: ClosingSession, step: ClosingStepId) =>
 export interface ClosingContext extends ClosingState {
   siteId: UUID;
   businessDate: BusinessDate;
-  actor: { id: UUID; role: Role };
+  actor: { id: UUID; post: Post; capabilities: readonly Capability[] };
   now: string;
   policy: ClosingPolicy;
   items: Item[];
@@ -890,7 +891,7 @@ function missingBefore(step: ClosingStepId, session: ClosingSession, ctx: Closin
   for (const earlier of CLOSING_STEPS.slice(0, stepIndex(step))) {
     if (!isDone(session, earlier)) blockers.push(`${CLOSING_STEP_LABEL[earlier]} : à faire.`);
   }
-  if (step === 'FINAL_VALIDATION' && !can(ctx.actor.role, 'CLOSE_DAY')) {
+  if (step === 'FINAL_VALIDATION' && !holds(ctx.actor.capabilities, 'CLOSE_DAY')) {
     blockers.push('Seul un manager ou un owner peut clôturer la journée.');
   }
   return blockers;
@@ -987,7 +988,7 @@ export function completeStep(
   }
   // Le refus de droit se dit avant le refus d'ordre : « vous n'avez pas le droit »
   // et « ce n'est pas encore le moment » n'appellent pas la même réaction.
-  if (step === 'FINAL_VALIDATION' && !can(ctx.actor.role, 'CLOSE_DAY')) {
+  if (step === 'FINAL_VALIDATION' && !holds(ctx.actor.capabilities, 'CLOSE_DAY')) {
     return fail('FORBIDDEN', 'Seul un manager ou un owner peut clôturer la journée.');
   }
   const before = missingBefore(step, session, ctx);
@@ -1234,7 +1235,7 @@ function buildStep(
           'Confirmez la clôture : après validation, plus aucune saisie ne pourra être datée de cette journée.',
         );
       }
-      if (!can(ctx.actor.role, 'CLOSE_DAY')) {
+      if (!holds(ctx.actor.capabilities, 'CLOSE_DAY')) {
         return fail(
           'FORBIDDEN',
           'Seul un manager ou un owner peut clôturer la journée.',

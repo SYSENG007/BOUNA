@@ -14,7 +14,7 @@ import { Button, Card, EmptyState, SectionLabel } from '../../../design-system/c
  * fournisseur habituel. L'approvisionneur coche pendant ses courses.
  */
 export function Replenishment() {
-  const { state, stockOf } = useBuna();
+  const { state, stockOf, can } = useBuna();
   const navigate = useNavigate();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
@@ -106,9 +106,20 @@ export function Replenishment() {
     <div className="flex min-h-full flex-1 flex-col bg-ivoire">
       <SyncIndicator />
 
-      <header className="px-4 pb-3 pt-4">
-        <h1 className="t-h1 text-cafe">À acheter</h1>
-        <p className="text-[12px] text-ink-500">Besoins calculés depuis les seuils et le stock réel</p>
+      <header className="flex items-start justify-between gap-3 px-4 pb-3 pt-4">
+        <div>
+          <h1 className="t-h1 text-cafe">À acheter</h1>
+          <p className="text-[12px] text-ink-500">Besoins calculés depuis les seuils et le stock réel</p>
+        </div>
+        {/* Créer un ingrédient ou corriger son coût vivait dans Pilotage, à
+            trois écrans d'ici. L'approvisionneur qui découvre un produit chez
+            son fournisseur en a besoin MAINTENANT, pas après avoir traversé
+            l'application. */}
+        {can('MANAGE_CATALOG') && (
+          <Button variant="secondary" size="compact" onClick={() => navigate('/pilotage/catalogue')}>
+            Gérer les articles
+          </Button>
+        )}
       </header>
 
       <main className="flex-1 space-y-3 px-4 pb-32">

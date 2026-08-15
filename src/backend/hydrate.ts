@@ -1,13 +1,14 @@
 import type {
-  AuditEvent, CashSession, DomainEvent, Expense, Item, Notification, ProductionBatch,
-  Purchase,  Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
+  AuditEvent, CashSession, DomainEvent, Expense, Item, Notification,
+  ProductionBatch, Purchase,  Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
   WasteEvent,
 } from '../domain/types';
+import type { CapabilityGrant } from '../domain/capabilities';
 import { supabase } from './supabase';
 import {
   mapAudit, mapBatch, mapCashSession, mapDomainEvent, mapExpense, mapItem, mapLocation,
   mapMovement, mapNotification, mapProfile, mapPurchase, mapSale, mapSite, mapStockLevel,
-  mapSupplier, mapWaste, type Row, type StockLevelRow,
+  mapSupplier, mapWaste, str, type Row, type StockLevelRow,
 } from './mappers';
 
 /**
@@ -45,6 +46,8 @@ export interface Snapshot {
   notifications: Notification[];
   audit: AuditEvent[];
   events: DomainEvent[];
+  /** Accords de capacités tels que le serveur les connaît — voir §0.2. */
+  grants: CapabilityGrant[];
   /** Numéro de vente le plus élevé connu du serveur : la numérotation continue. */
   saleCounter: number;
   /** Ce que le serveur pense du stock. Sert au contrôle, pas à l'affichage. */
@@ -92,7 +95,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
 
   const [
     sites, locations, suppliers, profiles, items, movements, sales, expenses,
-    waste, batches, purchases, cashSessions, notifications, audit, events, levels,
+    waste, batches, purchases, cashSessions, notifications, audit, events, levels, capabilities,
   ] = await Promise.all([
     fetchRows('sites', () => db.from('sites').select('*').eq('organization_id', orgId)),
     fetchRows('stock_locations', () => db.from('stock_locations').select('*').eq('site_id', siteId)),
@@ -123,6 +126,9 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     fetchRows('domain_events', () => db.from('domain_events').select('*')
       .eq('organization_id', orgId).order('created_at_server', recent).limit(HISTORY_LIMIT)),
     fetchRows('stock_levels', () => db.from('stock_levels').select('*').eq('organization_id', orgId)),
+    // Accords de capacités : sans cette lecture, ce que `grant_capability` écrit
+    // en base ne redevient jamais visible sur un autre appareil (§0.2).
+    fetchRows('user_capabilities', () => db.from('user_capabilities').select('*').eq('organization_id', orgId)),
   ]);
 
   // Sans catalogue ni emplacements, il n'y a pas d'application : on renonce.
@@ -130,7 +136,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
 
   const problems = [
     sites, locations, suppliers, profiles, items, movements, sales, expenses,
-    waste, batches, purchases, cashSessions, notifications, audit, events, levels,
+    waste, batches, purchases, cashSessions, notifications, audit, events, levels, capabilities,
   ]
     .map((f) => f.error)
     .filter((e): e is string => e !== null);
@@ -143,6 +149,21 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
 
   const mappedSales = sales.rows.map(mapSale);
   const viewerCapabilities = profile.capabilities;
+
+  // `user_capabilities` ne porte que des identifiants (§0.2) : les noms
+  // affichés au Journal des accès viennent des profils déjà chargés ci-dessus.
+  const nameById = new Map(profiles.rows.map((r) => [str(r.id), str(r.name, '—')]));
+  const mappedGrants: CapabilityGrant[] = capabilities.rows.map((r) => ({
+    id: str(r.id),
+    userId: str(r.user_id),
+    capability: r.capability as CapabilityGrant['capability'],
+    grantedBy: str(r.granted_by),
+    grantedByName: nameById.get(str(r.granted_by)) ?? '—',
+    grantedAt: str(r.granted_at),
+    revokedBy: r.revoked_by ? str(r.revoked_by) : undefined,
+    revokedByName: r.revoked_by ? nameById.get(str(r.revoked_by)) ?? '—' : undefined,
+    revokedAt: r.revoked_at ? str(r.revoked_at) : undefined,
+  }));
 
   return {
     organizationId: orgId,
@@ -161,6 +182,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     notifications: notifications.rows.map((r) => mapNotification(r, viewerCapabilities)),
     audit: audit.rows.map(mapAudit),
     events: events.rows.map(mapDomainEvent),
+    grants: mappedGrants,
     saleCounter: mappedSales.reduce((max, s) => Math.max(max, s.number), 0),
     stockLevels: levels.rows.map(mapStockLevel),
     problems,

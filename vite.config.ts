@@ -29,6 +29,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         navigateFallback: '/index.html',
+        // Le manuel est un vrai fichier, pas une route de l'application. Sans
+        // cette exception, la règle de repli SPA pourrait lui servir index.html
+        // et renvoyer sur l'accueil quelqu'un qui a demandé l'aide.
+        navigateFallbackDenylist: [/^\/manuel\.html$/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,

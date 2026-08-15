@@ -1,0 +1,2277 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F4EFE7">
+<link rel="icon" href="/favicon.svg">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}img,svg{max-width:100%}
+/* ------------------------------- Sommaire du téléphone
+   Le rail latéral disparaît sous 1080 px, et sans lui le manuel devenait un
+   long déroulé sans point d'entrée. Sur un téléphone, au comptoir, on vient
+   chercher UN chapitre — il faut pouvoir y sauter. */
+.toc-mobile {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  margin-bottom: 44px;
+}
+.toc-mobile ol {
+  list-style: none; margin: 12px 0 0; padding: 0;
+  display: grid; grid-template-columns: 1fr; gap: 1px;
+}
+@media (min-width: 560px) { .toc-mobile ol { grid-template-columns: 1fr 1fr; gap: 1px 20px; } }
+.toc-mobile a {
+  display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: baseline;
+  min-height: 44px; padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink); text-decoration: none; font-size: 15px;
+}
+.toc-mobile a:hover { color: var(--brand); }
+.toc-mobile a .n { font-family: var(--font-mono); font-size: 11px; color: var(--brand); }
+@media (min-width: 1080px) { .toc-mobile { display: none; } }
+@media print { .toc-mobile { display: none; } }
+</style>
+<title>BUNA sur le terrain</title>
+
+<style>
+/* ================================================================
+   Jetons — repris du design system de l'application (src/index.css).
+   Palette light complète sur :root, redéfinie pour les deux états
+   sombres. Aucune couleur n'existe uniquement dans un bloc @media.
+   ================================================================ */
+:root {
+  --paper:        #F4EFE7;
+  --paper-deep:   #EAE2D5;
+  --card:         #FFFDFA;
+  --card-2:       #F5EDE1;
+  --line:         #DED5C8;
+  --line-strong:  #BFB2A0;
+  --ink:          #2E211A;
+  --ink-soft:     #4A423C;
+  --ink-faint:    #7C716A;
+  --brand:        #6E4A2E;
+  --brand-deep:   #4A2F1C;
+  --brand-pale:   #EDE0CD;
+  --gold:         #D4AF37;
+  --gold-ink:     #8A6614;
+  --gold-wash:    #FBF3DE;
+  --ok:           #4E5C44;
+  --ok-pale:      #E4EADF;
+  --watch:        #9A7420;
+  --watch-pale:   #F7EBD3;
+  --crit:         #8E3A26;
+  --crit-pale:    #F7E4DE;
+  --info:         #365260;
+  --info-pale:    #E3EAEE;
+  --shadow:       0 1px 2px rgba(46,33,26,.05), 0 12px 30px rgba(46,33,26,.07);
+  --shadow-sm:    0 1px 2px rgba(46,33,26,.06);
+
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans:    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:       #16110E;
+    --paper-deep:  #100C0A;
+    --card:        #221B16;
+    --card-2:      #2B231D;
+    --line:        #3A2F27;
+    --line-strong: #52443A;
+    --ink:         #F2E9DC;
+    --ink-soft:    #CFC2B2;
+    --ink-faint:   #9C9085;
+    --brand:       #CD9E73;
+    --brand-deep:  #E0B892;
+    --brand-pale:  #33261C;
+    --gold:        #E2C25C;
+    --gold-ink:    #E2C25C;
+    --gold-wash:   #2A2213;
+    --ok:          #9CAE8D;
+    --ok-pale:     #212819;
+    --watch:       #DBB04D;
+    --watch-pale:  #2E2513;
+    --crit:        #D68D75;
+    --crit-pale:   #2F1D16;
+    --info:        #92B2C2;
+    --info-pale:   #17242A;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 14px 34px rgba(0,0,0,.34);
+    --shadow-sm:   0 1px 2px rgba(0,0,0,.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:       #16110E;
+  --paper-deep:  #100C0A;
+  --card:        #221B16;
+  --card-2:      #2B231D;
+  --line:        #3A2F27;
+  --line-strong: #52443A;
+  --ink:         #F2E9DC;
+  --ink-soft:    #CFC2B2;
+  --ink-faint:   #9C9085;
+  --brand:       #CD9E73;
+  --brand-deep:  #E0B892;
+  --brand-pale:  #33261C;
+  --gold:        #E2C25C;
+  --gold-ink:    #E2C25C;
+  --gold-wash:   #2A2213;
+  --ok:          #9CAE8D;
+  --ok-pale:     #212819;
+  --watch:       #DBB04D;
+  --watch-pale:  #2E2513;
+  --crit:        #D68D75;
+  --crit-pale:   #2F1D16;
+  --info:        #92B2C2;
+  --info-pale:   #17242A;
+  --shadow:      0 1px 2px rgba(0,0,0,.4), 0 14px 34px rgba(0,0,0,.34);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,.4);
+}
+
+/* ============================================================ Base */
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+* { box-sizing: border-box; }
+p { margin: 0 0 1em; }
+p:last-child { margin-bottom: 0; }
+strong { color: var(--ink); font-weight: 600; }
+a { color: var(--brand); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 3px; }
+
+h1, h2, h3, h4 { color: var(--ink); text-wrap: balance; margin: 0; }
+h1 { font-family: var(--font-display); font-weight: 500; letter-spacing: -.02em; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 30px; line-height: 1.18; letter-spacing: -.015em; }
+h3 { font-size: 19px; line-height: 1.35; font-weight: 600; letter-spacing: -.005em; }
+h4 { font-size: 15px; line-height: 1.4; font-weight: 600; }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+/* ============================================== Coque du document */
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 56px;
+}
+@media (min-width: 1080px) {
+  .wrap { grid-template-columns: 210px minmax(0, 1fr); }
+  .toc-col { grid-column: 1; }
+  .body-col { grid-column: 2; }
+  .cover { grid-column: 1 / -1; }
+}
+.body-col { min-width: 0; }
+
+/* ================================================= Page de garde */
+.cover {
+  padding: 76px 0 44px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 52px;
+}
+.cover-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.cover-mark .bean {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--brand);
+  position: relative; flex: none;
+}
+.cover-mark .bean::after {
+  content: ""; position: absolute; inset: 4px 9px;
+  border-radius: 999px; background: var(--card);
+}
+.cover h1 {
+  font-size: clamp(44px, 8vw, 82px);
+  line-height: .98;
+  margin: 30px 0 0;
+}
+.cover h1 em {
+  font-style: italic;
+  color: var(--brand);
+}
+.cover .lede {
+  font-size: 20px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 33em;
+  margin-top: 22px;
+}
+.cover-meta {
+  display: flex; flex-wrap: wrap; gap: 10px 28px;
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.cover-meta div { display: flex; flex-direction: column; gap: 2px; }
+.cover-meta .v { font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+
+/* =========================================== Sommaire (rail collant) */
+.toc-col { display: none; }
+@media (min-width: 1080px) {
+  .toc-col { display: block; }
+  .toc { position: sticky; top: 28px; padding-bottom: 40px; }
+}
+.toc ol { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.toc a {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink-faint);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  transition: color .15s, border-color .15s;
+}
+.toc a:hover { color: var(--ink); border-left-color: var(--gold); }
+.toc a .n { font-family: var(--font-mono); font-size: 11px; color: var(--brand); padding-top: 2px; }
+
+/* ==================================================== Chapitres */
+.chapter { padding-top: 30px; margin-bottom: 76px; scroll-margin-top: 24px; }
+.chapter-head { margin-bottom: 30px; }
+.chapter-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .14em;
+  color: var(--brand);
+  display: block;
+  margin-bottom: 12px;
+}
+.chapter-head h2 { max-width: 20em; }
+.chapter-head .intro {
+  margin-top: 16px;
+  font-size: 17.5px;
+  line-height: 1.6;
+  max-width: 40em;
+  color: var(--ink-soft);
+}
+
+/* ======================================================= Cartes */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 22px 24px; }
+.stack { display: flex; flex-direction: column; gap: 22px; }
+.stack-sm { display: flex; flex-direction: column; gap: 12px; }
+
+/* Le filet doré — signature du produit : il ne marque QUE ce que
+   le système déduit. Jamais décoratif. */
+.derived {
+  position: relative;
+  padding-left: 16px;
+}
+.derived::before {
+  content: "";
+  position: absolute; left: 0; top: 3px; bottom: 3px;
+  width: 2px; border-radius: 1px;
+  background: linear-gradient(to bottom, var(--gold) 0%, color-mix(in srgb, var(--gold) 30%, transparent) 100%);
+}
+
+/* Le couple déclarer / déduire — le motif structurel du manuel */
+.split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 20px 22px;
+  box-shadow: var(--shadow-sm);
+}
+@media (min-width: 720px) { .split { grid-template-columns: 1fr 1fr; gap: 28px; } }
+.split .lab {
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  margin-bottom: 9px; display: block;
+}
+.split .declare .lab { color: var(--brand); }
+.split .derive  .lab { color: var(--gold-ink); }
+.split ul { margin: 0; padding-left: 17px; }
+.split li { margin-bottom: 5px; font-size: 14.5px; line-height: 1.5; }
+.split li:last-child { margin-bottom: 0; }
+.split .quote {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+/* ================================================== Puces / états */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  padding: 3px 8px; border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: var(--card-2); color: var(--ink-soft);
+  white-space: nowrap;
+}
+.pill.gold  { background: var(--gold-wash); border-color: var(--gold); color: var(--gold-ink); }
+.pill.ok    { background: var(--ok-pale);    border-color: var(--ok);    color: var(--ok); }
+.pill.watch { background: var(--watch-pale); border-color: var(--watch); color: var(--watch); }
+.pill.crit  { background: var(--crit-pale);  border-color: var(--crit);  color: var(--crit); }
+.pill.info  { background: var(--info-pale);  border-color: var(--info);  color: var(--info); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.route {
+  font-family: var(--font-mono); font-size: 12.5px;
+  color: var(--brand); background: var(--brand-pale);
+  padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+}
+
+/* ==================================================== Figures */
+figure { margin: 0; }
+.fig {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px 20px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.fig .scroller { overflow-x: auto; }
+.fig svg { display: block; max-width: 100%; height: auto; min-width: 560px; margin: 0 auto; }
+.fig figcaption {
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px; line-height: 1.55; color: var(--ink-faint);
+  max-width: 46em;
+}
+.fig figcaption b { color: var(--ink-soft); font-weight: 600; }
+
+/* Traits et textes des schémas */
+svg text { font-family: var(--font-sans); fill: var(--ink); }
+svg .t-lab   { font-size: 13px; font-weight: 600; }
+svg .t-sub   { font-size: 11px; fill: var(--ink-faint); }
+svg .t-edge  { font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink-faint); letter-spacing: .02em; }
+svg .t-mono  { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-soft); }
+svg .t-step  { font-family: var(--font-mono); font-size: 11px; fill: var(--brand); }
+svg .t-gold  { fill: var(--gold-ink); }
+svg .box     { fill: var(--card-2); stroke: var(--line-strong); stroke-width: 1; }
+svg .box-b   { fill: var(--brand-pale); stroke: var(--brand); stroke-width: 1; }
+svg .box-g   { fill: var(--gold-wash); stroke: var(--gold); stroke-width: 1.25; }
+svg .box-ok  { fill: var(--ok-pale); stroke: var(--ok); stroke-width: 1; }
+svg .box-crit{ fill: var(--crit-pale); stroke: var(--crit); stroke-width: 1; }
+svg .box-watch{ fill: var(--watch-pale); stroke: var(--watch); stroke-width: 1; }
+svg .box-info{ fill: var(--info-pale); stroke: var(--info); stroke-width: 1; }
+svg .edge    { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+svg .edge-b  { stroke: var(--brand); stroke-width: 1.6; fill: none; }
+svg .edge-g  { stroke: var(--gold); stroke-width: 1.6; fill: none; }
+svg .edge-d  { stroke: var(--line-strong); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+svg .box-strong { fill: var(--brand); stroke: var(--brand-deep); stroke-width: 1; }
+svg .t-inv   { fill: var(--card); }
+svg .ah  { fill: var(--line-strong); }
+svg .ahb { fill: var(--brand); }
+svg .ahg { fill: var(--gold); }
+svg .t-tiny { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-faint); letter-spacing: .06em; }
+
+/* ==================================================== Tableaux */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); box-shadow: var(--shadow-sm); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 640px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+thead th {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-faint); font-weight: 500;
+  background: var(--card-2); position: sticky; top: 0;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+tbody th { font-weight: 600; color: var(--ink); font-size: 14px; }
+.yes { color: var(--ok); font-weight: 700; }
+tr.derived-row { background: var(--gold-wash); }
+tr.derived-row th { color: var(--gold-ink); }
+tr.derived-row td:last-child { color: var(--gold-ink); }
+.no  { color: var(--ink-faint); opacity: .45; }
+
+/* =============================================== Fiches de poste */
+.role {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.role-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
+  padding: 18px 22px;
+  background: var(--card-2);
+  border-bottom: 1px solid var(--line);
+}
+.role-head h3 { font-family: var(--font-display); font-weight: 500; font-size: 25px; letter-spacing: -.01em; }
+.role-head .who { font-size: 14px; color: var(--ink-faint); }
+.role-head .count { margin-left: auto; }
+.role-body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 18px; }
+.role-body .scroller { overflow-x: auto; }
+.role-body svg { display: block; min-width: 620px; max-width: 100%; height: auto; }
+
+.note {
+  border-left: 2px solid var(--brand);
+  padding: 2px 0 2px 16px;
+  font-size: 14.5px; line-height: 1.55;
+  color: var(--ink-soft);
+}
+.note.gold { border-left-color: var(--gold); }
+.note b { color: var(--ink); }
+
+.grid2 { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 780px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+.grid3 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 700px) { .grid3 { grid-template-columns: repeat(3, 1fr); } }
+
+.mini { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; background: var(--card); }
+.mini h4 { margin-bottom: 6px; }
+.mini p { font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+
+dl.gloss { margin: 0; display: grid; grid-template-columns: 1fr; gap: 0; }
+dl.gloss > div { padding: 14px 0; border-bottom: 1px solid var(--line); }
+dl.gloss > div:last-child { border-bottom: 0; }
+dt { font-weight: 600; color: var(--ink); font-size: 15px; margin-bottom: 3px; }
+dd { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-soft); }
+
+.closer {
+  margin-top: 20px;
+  padding: 30px 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card-2);
+}
+.closer p { font-family: var(--font-display); font-size: 22px; line-height: 1.4; color: var(--ink); font-style: italic; max-width: 26em; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ==================================================== Impression */
+@media print {
+  :root { --shadow: none; --shadow-sm: none; }
+  body { background: #fff; font-size: 11.5pt; }
+  .wrap { display: block; max-width: none; padding: 0 0 12mm; }
+  .toc-col { display: none !important; }
+  .chapter { break-before: page; padding-top: 0; margin-bottom: 26px; }
+  .cover { break-after: page; padding-top: 12mm; }
+  .card, .fig, .role, .split, .mini, .closer { break-inside: avoid; }
+  figure, .role { break-inside: avoid; }
+  .fig svg, .role-body svg { min-width: 0; }
+  .fig .scroller, .role-body .scroller, .table-wrap { overflow: visible; }
+  /* Un tableau de 30 lignes ne tient pas sur une page : on le laisse couper,
+     mais l'en-tête se répète en haut de chaque page. */
+  .table-wrap { break-inside: auto; }
+  thead { display: table-header-group; }
+  thead th { position: static; }
+  tr { break-inside: avoid; }
+  table { min-width: 0; font-size: 9.5pt; }
+  h2 { font-size: 24pt; }
+}
+
+/* ------------------------------------------------ Retour vers l'application */
+.backbar {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.backbar-in {
+  max-width: 1240px; margin: 0 auto;
+  padding: 10px 24px;
+  display: flex; align-items: center; gap: 14px;
+}
+.backbar a.back {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px 0 10px;
+  border: 1px solid var(--line-strong); border-radius: 6px;
+  background: var(--card); color: var(--ink);
+  font-size: 14.5px; font-weight: 600; text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+.backbar a.back:hover { background: var(--card-2); }
+.backbar .here { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
+@media (max-width: 620px) { .backbar .here { display: none; } }
+@media print { .backbar { display: none; } }
+</style>
+
+
+</head>
+<body>
+<div class="backbar">
+  <div class="backbar-in">
+    <a class="back" href="/" aria-label="Retour à l'application BUNA">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      Retour à l'application
+    </a>
+    <span class="here">Manuel de l'équipe</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ============================================== PAGE DE GARDE -->
+  <header class="cover">
+    <span class="cover-mark"><span class="bean"></span><span class="eyebrow">BUNA Operations</span></span>
+    <h1>BUNA<br>sur le <em>terrain</em></h1>
+    <p class="lede">
+      Le manuel de l'équipe. Ce que chacun déclare, ce que le système en déduit,
+      et le chemin exact que suit une information depuis le comptoir jusqu'au
+      chiffre du soir.
+    </p>
+    <div class="cover-meta">
+      <div><span class="eyebrow">Pour</span><span class="v">Toute l'équipe</span></div>
+      <div><span class="eyebrow">Postes couverts</span><span class="v">6</span></div>
+      <div><span class="eyebrow">Opérations</span><span class="v">25</span></div>
+      <div><span class="eyebrow">Écrans</span><span class="v">29</span></div>
+      <div><span class="eyebrow">Édition</span><span class="v">Août 2026</span></div>
+    </div>
+  </header>
+
+  <nav class="toc-mobile body-col" aria-label="Sommaire">
+    <span class="eyebrow">Sommaire</span>
+    <ol>
+        <li><a href="#ch1"><span class="n">01</span><span>Le principe</span></a></li>
+        <li><a href="#ch2"><span class="n">02</span><span>Où appuyer</span></a></li>
+        <li><a href="#ch3"><span class="n">03</span><span>Qui peut quoi</span></a></li>
+        <li><a href="#ch4"><span class="n">04</span><span>Les six parcours</span></a></li>
+        <li><a href="#ch5"><span class="n">05</span><span>Les flux, de bout en bout</span></a></li>
+        <li><a href="#ch6"><span class="n">06</span><span>La clôture</span></a></li>
+        <li><a href="#ch7"><span class="n">07</span><span>Sans réseau</span></a></li>
+        <li><a href="#ch8"><span class="n">08</span><span>Fixer ses prix</span></a></li>
+        <li><a href="#ch9"><span class="n">09</span><span>Catalogue des écrans</span></a></li>
+        <li><a href="#ch10"><span class="n">10</span><span>Vocabulaire</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ================================================== SOMMAIRE -->
+  <nav class="toc-col" aria-label="Sommaire">
+    <div class="toc">
+      <span class="eyebrow">Sommaire</span>
+      <ol>
+        <li><a href="#ch1"><span class="n">01</span><span>Le principe</span></a></li>
+        <li><a href="#ch2"><span class="n">02</span><span>Où appuyer</span></a></li>
+        <li><a href="#ch3"><span class="n">03</span><span>Qui peut quoi</span></a></li>
+        <li><a href="#ch4"><span class="n">04</span><span>Les six parcours</span></a></li>
+        <li><a href="#ch5"><span class="n">05</span><span>Les flux, de bout en bout</span></a></li>
+        <li><a href="#ch6"><span class="n">06</span><span>La clôture</span></a></li>
+        <li><a href="#ch7"><span class="n">07</span><span>Sans réseau</span></a></li>
+        <li><a href="#ch8"><span class="n">08</span><span>Fixer ses prix</span></a></li>
+        <li><a href="#ch9"><span class="n">09</span><span>Catalogue des écrans</span></a></li>
+        <li><a href="#ch10"><span class="n">10</span><span>Vocabulaire</span></a></li>
+      </ol>
+    </div>
+  </nav>
+
+  <main class="body-col">
+
+  <!-- ================================================ CHAPITRE 1 -->
+  <section class="chapter" id="ch1">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 01</span>
+      <h2>Vous déclarez ce qui s'est passé. Le système en déduit le reste.</h2>
+      <p class="intro">
+        C'est la seule règle à retenir, et tout le reste du manuel en découle.
+        Personne ne saisit un niveau de stock, une marge ou un solde de caisse&nbsp;:
+        on déclare des faits — <span class="mono">j'ai vendu 3 cafés</span>,
+        <span class="mono">j'ai cassé 1 bouteille</span>,
+        <span class="mono">j'ai reçu 20 L de lait</span> — et l'application recalcule
+        tout ce qui en découle, à chaque fois qu'un écran s'ouvre.
+      </p>
+    </div>
+
+    <div class="stack">
+
+      <div class="split">
+        <div class="declare">
+          <span class="lab">Ce que vous déclarez</span>
+          <p class="quote">« J'ai vendu 3 cafés au lait, payés en espèces. »</p>
+          <p style="font-size:14px;margin-top:10px;color:var(--ink-faint)">
+            Quatre appuis sur l'écran. Rien d'autre à remplir.
+          </p>
+        </div>
+        <div class="derive derived">
+          <span class="lab">Ce que le système en déduit</span>
+          <ul>
+            <li>3 sorties de stock au comptoir</li>
+            <li>Le coût de revient figé à l'instant de la vente</li>
+            <li>La marge de la vente, et celle de la journée</li>
+            <li>Les espèces attendues en caisse ce soir</li>
+            <li>Une alerte si le lait passe sous son seuil</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="note gold">
+        <b>Le filet doré.</b> Partout dans l'application — et dans ce manuel — un
+        petit trait doré à gauche d'un chiffre signifie&nbsp;: <b>ceci est calculé, personne
+        ne l'a tapé</b>. Vous n'avez jamais à le corriger. S'il est faux, c'est qu'un fait
+        manque en amont, et c'est ce fait-là qu'il faut déclarer.
+      </p>
+
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 452" role="img" aria-label="Le chemin d'un fait : un geste devient un événement daté, qui est déposé dans une file locale et produit immédiatement des mouvements de stock ; le serveur rejoue les mêmes événements et obtient les mêmes mouvements.">
+          <defs>
+            <marker id="f1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ah"/>
+            </marker>
+            <marker id="f1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ahb"/>
+            </marker>
+            <marker id="f1g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ahg"/>
+            </marker>
+          </defs>
+
+          <rect x="8" y="22" width="700" height="416" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="6 5"/>
+          <text x="22" y="42" class="t-edge">SUR VOTRE APPAREIL · RIEN N'ATTEND LE RÉSEAU</text>
+
+          <!-- Ligne 1 : le fait déclaré -->
+          <rect x="20"  y="58" width="160" height="64" rx="6" class="box-b"/>
+          <text x="100" y="84"  class="t-lab" text-anchor="middle">Votre geste</text>
+          <text x="100" y="102" class="t-sub" text-anchor="middle">4 appuis au comptoir</text>
+
+          <rect x="250" y="58" width="180" height="64" rx="6" class="box-b"/>
+          <text x="340" y="82"  class="t-lab" text-anchor="middle">Un fait daté</text>
+          <text x="340" y="100" class="t-sub" text-anchor="middle">signé, horodaté,</text>
+          <text x="340" y="114" class="t-sub" text-anchor="middle">numéro unique</text>
+
+          <rect x="500" y="58" width="180" height="64" rx="6" class="box"/>
+          <text x="590" y="82"  class="t-lab" text-anchor="middle">La file d'attente</text>
+          <text x="590" y="100" class="t-sub" text-anchor="middle">sur le téléphone,</text>
+          <text x="590" y="114" class="t-sub" text-anchor="middle">survit au redémarrage</text>
+
+          <rect x="750" y="58" width="176" height="64" rx="6" class="box-info"/>
+          <text x="838" y="84"  class="t-lab" text-anchor="middle">Le serveur</text>
+          <text x="838" y="102" class="t-sub" text-anchor="middle">rejoue les mêmes faits</text>
+
+          <line x1="180" y1="90" x2="242" y2="90" class="edge-b" marker-end="url(#f1b)"/>
+          <text x="211" y="82" class="t-edge" text-anchor="middle">devient</text>
+
+          <line x1="430" y1="90" x2="492" y2="90" class="edge" marker-end="url(#f1a)"/>
+          <text x="461" y="82" class="t-edge" text-anchor="middle">se range</text>
+
+          <line x1="680" y1="90" x2="742" y2="90" class="edge-d" marker-end="url(#f1a)"/>
+          <text x="711" y="66" class="t-edge" text-anchor="middle">au retour</text>
+          <text x="711" y="78" class="t-edge" text-anchor="middle">du réseau</text>
+
+          <!-- Ligne 2 : les mouvements -->
+          <line x1="340" y1="122" x2="340" y2="182" class="edge-b" marker-end="url(#f1b)"/>
+          <text x="350" y="152" class="t-edge">immédiatement</text>
+
+          <rect x="210" y="186" width="260" height="58" rx="6" class="box"/>
+          <text x="340" y="210" class="t-lab" text-anchor="middle">Mouvements de stock</text>
+          <text x="340" y="228" class="t-mono" text-anchor="middle">CAFÉ AU LAIT −3 · COMPTOIR</text>
+
+          <line x1="838" y1="122" x2="838" y2="182" class="edge-d" marker-end="url(#f1a)"/>
+          <rect x="750" y="186" width="176" height="58" rx="6" class="box-info"/>
+          <text x="838" y="210" class="t-lab" text-anchor="middle">Les mêmes</text>
+          <text x="838" y="228" class="t-lab" text-anchor="middle">mouvements</text>
+
+          <line x1="478" y1="215" x2="742" y2="215" class="edge-d"/>
+          <text x="610" y="207" class="t-edge" text-anchor="middle">identiques par construction</text>
+          <text x="606" y="234" class="t-edge" text-anchor="middle">un envoi répété ne crée pas deux ventes</text>
+
+          <!-- Ligne 3 : les projections -->
+          <line x1="340" y1="244" x2="340" y2="258" class="edge-g" marker-end="url(#f1g)"/>
+          <rect x="140" y="262" width="400" height="88" rx="6" class="box-g"/>
+          <text x="160" y="286" class="t-lab t-gold">Ce que le système recalcule, à chaque ouverture</text>
+          <text x="160" y="308" class="t-mono">Stock · Coût moyen · Marge · Trésorerie</text>
+          <text x="160" y="326" class="t-mono">Écarts · Alertes · Liste de courses</text>
+          <text x="160" y="342" class="t-sub">Aucun de ces chiffres n'est stocké quelque part.</text>
+
+          <line x1="340" y1="350" x2="340" y2="368" class="edge-g" marker-end="url(#f1g)"/>
+          <rect x="250" y="372" width="180" height="48" rx="6" class="box-b"/>
+          <text x="340" y="402" class="t-lab" text-anchor="middle">Vos écrans</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Un geste, un fait, deux lectures.</b> Le fait est enregistré sur l'appareil
+          avec un numéro unique, puis déposé dans une file d'attente. Il produit
+          <em>tout de suite</em> ses mouvements de stock, sans attendre le réseau — c'est
+          pourquoi la vente marche même quand le wifi tombe. Le serveur, lui, rejoue
+          exactement les mêmes faits et arrive au même résultat. Le numéro unique garantit
+          qu'un envoi répété ne crée jamais une deuxième vente.
+        </figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="mini">
+          <h4>Rien ne s'efface</h4>
+          <p>Une vente ne se supprime pas&nbsp;: elle s'annule, avec un motif, et l'annulation
+          s'ajoute à l'histoire. On peut toujours revenir en arrière et voir ce qui s'est
+          réellement passé.</p>
+        </div>
+        <div class="mini">
+          <h4>Chaque fait est signé</h4>
+          <p>Nom, poste, appareil, heure, et sous quelle autorisation l'opération a été
+          faite. Une question trois semaines plus tard se règle en une ligne du journal.</p>
+        </div>
+        <div class="mini">
+          <h4>Un motif quand ça coûte</h4>
+          <p>Toute correction qui touche à l'argent ou au stock demande une raison&nbsp;:
+          casse, périmé, offert, erreur de saisie. C'est la raison qui rend le chiffre
+          du soir lisible.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 2 -->
+  <section class="chapter" id="ch2">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 02</span>
+      <h2>Où appuyer&nbsp;: la barre ne change jamais de forme</h2>
+      <p class="intro">
+        Cinq emplacements, toujours au même endroit, quel que soit votre poste.
+        Celui qui tient trois opérations et celui qui en tient vingt-cinq appuient
+        exactement au même endroit&nbsp;— seule la liste qui s'ouvre change.
+      </p>
+    </div>
+
+    <div class="stack">
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 384" role="img" aria-label="La barre du bas comporte cinq emplacements fixes : deux domaines, le bouton Déclarer au centre, un troisième domaine, et le menu.">
+          <defs>
+            <marker id="f2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ah"/>
+            </marker>
+          </defs>
+
+          <!-- Rappels au-dessus -->
+          <rect x="60" y="46" width="300" height="70" rx="6" class="box"/>
+          <text x="76" y="70" class="t-lab">Vos domaines</text>
+          <text x="76" y="90" class="t-sub">Les trois premiers auxquels vous avez droit,</text>
+          <text x="76" y="105" class="t-sub">rangés par priorité. Toujours dans cet ordre.</text>
+          <line x1="142" y1="116" x2="142" y2="146" class="edge" marker-end="url(#f2a)"/>
+          <line x1="306" y1="116" x2="306" y2="146" class="edge" marker-end="url(#f2a)"/>
+
+          <rect x="380" y="34" width="184" height="82" rx="6" class="box-strong"/>
+          <text x="472" y="58" class="t-lab t-inv" text-anchor="middle">Déclarer</text>
+          <text x="472" y="78" class="t-sub t-inv" text-anchor="middle">Le point d'entrée unique</text>
+          <text x="472" y="94" class="t-sub t-inv" text-anchor="middle">de toute déclaration.</text>
+          <text x="472" y="110" class="t-sub t-inv" text-anchor="middle">Il ouvre un tiroir, il ne navigue pas.</text>
+          <line x1="470" y1="116" x2="470" y2="146" class="edge-b" marker-end="url(#f2a)"/>
+
+          <!-- La barre -->
+          <rect x="60" y="150" width="820" height="80" rx="8" class="box"/>
+          <line x1="224" y1="150" x2="224" y2="230" stroke="var(--line)" stroke-width="1"/>
+          <line x1="388" y1="150" x2="388" y2="230" stroke="var(--line)" stroke-width="1"/>
+          <line x1="552" y1="150" x2="552" y2="230" stroke="var(--line)" stroke-width="1"/>
+          <line x1="716" y1="150" x2="716" y2="230" stroke="var(--line)" stroke-width="1"/>
+
+          <rect x="390" y="152" width="160" height="76" rx="6" class="box-strong"/>
+          <circle cx="470" cy="180" r="13" fill="none" stroke="var(--card)" stroke-width="1.6"/>
+          <line x1="463" y1="180" x2="477" y2="180" stroke="var(--card)" stroke-width="1.6"/>
+          <line x1="470" y1="173" x2="470" y2="187" stroke="var(--card)" stroke-width="1.6"/>
+          <text x="470" y="212" class="t-lab t-inv" text-anchor="middle">Déclarer</text>
+
+          <text x="142" y="176" class="t-step" text-anchor="middle">1</text>
+          <text x="142" y="200" class="t-lab" text-anchor="middle">Aujourd'hui</text>
+          <text x="142" y="217" class="t-sub" text-anchor="middle">domaine</text>
+
+          <text x="306" y="176" class="t-step" text-anchor="middle">2</text>
+          <text x="306" y="200" class="t-lab" text-anchor="middle">Vendre</text>
+          <text x="306" y="217" class="t-sub" text-anchor="middle">domaine</text>
+
+          <text x="634" y="176" class="t-step" text-anchor="middle">4</text>
+          <text x="634" y="200" class="t-lab" text-anchor="middle">Stock</text>
+          <text x="634" y="217" class="t-sub" text-anchor="middle">domaine</text>
+
+          <text x="798" y="176" class="t-step" text-anchor="middle">5</text>
+          <text x="798" y="200" class="t-lab" text-anchor="middle">Menu</text>
+          <text x="798" y="217" class="t-sub" text-anchor="middle">le reste</text>
+
+          <!-- Rappels en dessous -->
+          <line x1="634" y1="230" x2="634" y2="262" class="edge" marker-end="url(#f2a)"/>
+          <rect x="546" y="266" width="180" height="70" rx="6" class="box"/>
+          <text x="562" y="290" class="t-lab">Troisième domaine</text>
+          <text x="562" y="309" class="t-sub">S'il vous en manque, cet</text>
+          <text x="562" y="324" class="t-sub">emplacement affiche les alertes.</text>
+
+          <line x1="798" y1="230" x2="830" y2="262" class="edge" marker-end="url(#f2a)"/>
+          <rect x="742" y="266" width="186" height="70" rx="6" class="box"/>
+          <text x="758" y="290" class="t-lab">Le menu</text>
+          <text x="758" y="309" class="t-sub">Les domaines au-delà du</text>
+          <text x="758" y="324" class="t-sub">troisième, alertes, et votre profil.</text>
+
+          <text x="60" y="360" class="t-edge">RIEN DE CE À QUOI VOUS AVEZ DROIT NE RESTE HORS D'ATTEINTE</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Cinq emplacements, un seul bouton pour déclarer.</b> Les domaines occupent
+          les emplacements 1, 2 et 4&nbsp;; le bouton central ouvre le tiroir des opérations,
+          et le dernier emplacement rattrape tout ce qui n'a pas tenu dans la barre.
+          Sur ordinateur, la même liste devient un rail vertical à gauche&nbsp;: le contenu
+          est identique, seule la forme change.
+        </figcaption>
+      </figure>
+
+      <div class="grid2">
+        <div class="card card-pad">
+          <span class="eyebrow">Le tiroir « Déclarer »</span>
+          <h3 style="margin:10px 0 8px">Vos gestes, pas vos écrans</h3>
+          <p style="font-size:14.5px">
+            Il s'ouvre sur ce que vous <em>déclarez</em>&nbsp;: enregistrer une vente,
+            déclarer une perte, réceptionner une livraison. Vos trois derniers gestes
+            remontent en tête, parce qu'au comptoir on refait souvent la même chose.
+            Les consultations sont plus bas — on ouvre ce tiroir pour déclarer, pas
+            pour regarder.
+          </p>
+        </div>
+        <div class="card card-pad">
+          <span class="eyebrow">Là où vous atterrissez</span>
+          <h3 style="margin:10px 0 8px">Jamais sur une page vide</h3>
+          <p style="font-size:14.5px">
+            À la connexion, l'application vous ouvre le tableau de bord si vous y avez
+            droit, sinon votre premier domaine. Si vous n'avez encore aucun accès, vous
+            arrivez sur votre profil, où il est écrit que vous attendez qu'on vous en
+            accorde — et à qui le demander.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 3 -->
+  <section class="chapter" id="ch3">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 03</span>
+      <h2>Votre poste ne décide pas de vos droits. Il les propose.</h2>
+      <p class="intro">
+        Un vendeur qui réceptionne la livraison du mardi matin reste un vendeur.
+        Le poste est une étiquette — stable, affichée, celle par laquelle on vous
+        appelle. Ce que vous pouvez faire, ce sont des <strong>accords</strong>&nbsp;:
+        donnés un par un, par quelqu'un, à une date, et repris de la même façon.
+      </p>
+    </div>
+
+    <div class="stack">
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 296" role="img" aria-label="Le poste propose un préréglage d'opérations ; le manager l'ajuste ; chaque accord est daté et signé ; les accords ouvrent les écrans et le tiroir.">
+          <defs>
+            <marker id="f3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ah"/>
+            </marker>
+            <marker id="f3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" class="ahb"/>
+            </marker>
+          </defs>
+
+          <rect x="20" y="70" width="160" height="76" rx="6" class="box"/>
+          <text x="100" y="98"  class="t-lab" text-anchor="middle">Le poste</text>
+          <text x="100" y="118" class="t-sub" text-anchor="middle">« Vendeur »</text>
+          <text x="100" y="134" class="t-sub" text-anchor="middle">une étiquette, pas un droit</text>
+
+          <line x1="180" y1="108" x2="242" y2="108" class="edge" marker-end="url(#f3a)"/>
+          <text x="211" y="100" class="t-edge" text-anchor="middle">propose</text>
+
+          <rect x="250" y="70" width="170" height="76" rx="6" class="box"/>
+          <text x="335" y="98"  class="t-lab" text-anchor="middle">Un préréglage</text>
+          <text x="335" y="118" class="t-sub" text-anchor="middle">4 opérations cochées</text>
+          <text x="335" y="134" class="t-sub" text-anchor="middle">d'avance, à la création</text>
+
+          <line x1="420" y1="108" x2="482" y2="108" class="edge-b" marker-end="url(#f3b)"/>
+          <text x="451" y="94"  class="t-edge" text-anchor="middle">le manager</text>
+          <text x="451" y="106" class="t-edge" text-anchor="middle">coche</text>
+
+          <rect x="490" y="70" width="180" height="76" rx="6" class="box-b"/>
+          <text x="580" y="98"  class="t-lab" text-anchor="middle">Un accord</text>
+          <text x="580" y="118" class="t-sub" text-anchor="middle">« Réceptionner une</text>
+          <text x="580" y="134" class="t-sub" text-anchor="middle">livraison » · daté, signé</text>
+
+          <line x1="670" y1="108" x2="732" y2="108" class="edge-b" marker-end="url(#f3b)"/>
+          <text x="701" y="100" class="t-edge" text-anchor="middle">ouvre</text>
+
+          <rect x="740" y="70" width="180" height="76" rx="6" class="box-b"/>
+          <text x="830" y="98"  class="t-lab" text-anchor="middle">Ce que vous faites</text>
+          <text x="830" y="118" class="t-sub" text-anchor="middle">un onglet, une ligne</text>
+          <text x="830" y="134" class="t-sub" text-anchor="middle">dans le tiroir, un écran</text>
+
+          <line x1="580" y1="146" x2="580" y2="192" class="edge" marker-end="url(#f3a)"/>
+          <rect x="470" y="196" width="220" height="64" rx="6" class="box"/>
+          <text x="580" y="220" class="t-lab" text-anchor="middle">Le journal</text>
+          <text x="580" y="240" class="t-sub" text-anchor="middle">qui a donné quoi, à qui, quand</text>
+
+          <line x1="830" y1="146" x2="830" y2="192" class="edge" marker-end="url(#f3a)"/>
+          <rect x="730" y="196" width="190" height="64" rx="6" class="box"/>
+          <text x="825" y="220" class="t-lab" text-anchor="middle">Retirer un accès</text>
+          <text x="825" y="240" class="t-sub" text-anchor="middle">se date, ne s'efface pas</text>
+
+          <text x="20" y="46" class="t-edge">LE MÊME LIBELLÉ DES DEUX CÔTÉS · CE QUE LE MANAGER COCHE EST CE QUE VOUS LIREZ</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>La délégation se lit sans notice.</b> Le manager coche « Réceptionner une
+          livraison » — c'est mot pour mot ce que la personne verra dans son tiroir. Chaque
+          accord porte la date et le nom de celui qui l'a donné&nbsp;; le retirer ne l'efface
+          pas, cela ajoute une ligne. L'historique « qui a donné quoi à qui » existe donc
+          sans que personne n'ait à le tenir.
+        </figcaption>
+      </figure>
+
+      <div>
+        <h3 style="margin-bottom:6px">Les 25 opérations, et qui les reçoit par défaut</h3>
+        <p style="font-size:14.5px;max-width:44em;margin-bottom:14px">
+          Ce tableau est un <em>point de départ</em>, pas une règle. Chaque case se coche
+          et se décoche depuis l'écran Équipe, personne par personne.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:230px">Opération</th>
+                <th class="num">Vendeur</th><th class="num">Préparateur</th>
+                <th class="num">Appro</th><th class="num">Finance</th>
+                <th class="num">Manager</th><th class="num">Propriétaire</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Vente</span></td></tr>
+              <tr><th>Enregistrer une vente</th><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Annuler une vente</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Ouvrir et fermer la caisse</th><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Voir les ventes de toute l'équipe</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Stock</span></td></tr>
+              <tr><th>Consulter le stock</th><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Déclarer une perte</th><td class="num yes">✓</td><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Transférer du stock</th><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Compter un emplacement</th><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Solder un écart</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Production</span></td></tr>
+              <tr><th>Lancer une préparation</th><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Modifier une recette</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Approvisionnement</span></td></tr>
+              <tr><th>Demander un achat</th><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Approuver une demande</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Passer commande</th><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Réceptionner une livraison</th><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Gérer les fournisseurs</th><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Finance</span></td></tr>
+              <tr><th>Enregistrer une dépense</th><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Voir les marges et la trésorerie</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Clôturer la journée</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Rouvrir une journée clôturée</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td></tr>
+
+              <tr><td colspan="7" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Pilotage</span></td></tr>
+              <tr><th>Voir le tableau de bord</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Gérer le catalogue</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Gérer les emplacements</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Gérer l'équipe et les accès</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+              <tr><th>Consulter le journal</th><td class="num no">·</td><td class="num no">·</td><td class="num no">·</td><td class="num yes">✓</td><td class="num yes">✓</td><td class="num yes">✓</td></tr>
+
+              <tr style="background:var(--card-2)">
+                <th>Total par défaut</th>
+                <td class="num">4</td><td class="num">5</td><td class="num">6</td>
+                <td class="num">8</td><td class="num">24</td><td class="num">25</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-top:16px">
+          <b>La seule opération que le manager n'a pas.</b> Rouvrir une journée déjà
+          clôturée appartient au propriétaire, et à lui seul. Une clôture qui se défait
+          trop facilement n'est pas une clôture.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 4 -->
+  <section class="chapter" id="ch4">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 04</span>
+      <h2>Les six parcours&nbsp;: trouvez le vôtre</h2>
+      <p class="intro">
+        Chaque fiche donne la même chose dans le même ordre&nbsp;: par où vous passez dans
+        la journée, ce que vous déclarez, et ce que l'application en déduit sans que vous
+        ayez à y toucher. Si vous cumulez deux postes, lisez les deux fiches&nbsp;— rien ne
+        se contredit, les parcours s'additionnent.
+      </p>
+    </div>
+
+    <div class="stack">
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Vendeur</h3>
+          <span class="who">Au comptoir, toute la journée</span>
+          <span class="count pill">4 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours du vendeur : ouvrir la caisse, vendre, déclarer une perte, vérifier le stock, fermer la caisse.">
+            <defs><marker id="rva" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">J&#x27;ouvre</text>
+            <text x="16" y="71" class="t-lab">la caisse</text>
+            <text x="16" y="90" class="t-tiny">/finance/caisse</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#rva)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="60" class="t-lab">Je vends</text>
+            <text x="206" y="90" class="t-tiny">/vente → reçu</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#rva)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Je déclare</text>
+            <text x="396" y="71" class="t-lab">une casse</text>
+            <text x="396" y="90" class="t-tiny">/stock/perte</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#rva)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="56" class="t-lab">Je vérifie</text>
+            <text x="586" y="71" class="t-lab">le stock</text>
+            <text x="586" y="90" class="t-tiny">/stock</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#rva)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="56" class="t-lab">Je compte</text>
+            <text x="776" y="71" class="t-lab">le tiroir</text>
+            <text x="776" y="90" class="t-tiny">/finance/caisse</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>Les produits vendus et le moyen de paiement</li>
+            <li>Une casse, avec son motif</li>
+            <li>Le fond de caisse le matin, le comptage le soir</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>Le stock du comptoir, produit par produit</li>
+            <li>Le coût et la marge de chaque vente</li>
+            <li>Les espèces attendues dans le tiroir</li>
+            <li>L'écart de caisse, une fois votre comptage saisi</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Pas de vente sans caisse ouverte.</b> L'écran de vente reste fermé tant que la caisse n'est pas ouverte : sans elle, les espèces du soir ne se rattachent à rien et l'écart devient inexplicable.</p>
+        <p class="note gold"><b>Le comptage se fait à l'aveugle.</b> Le montant attendu reste masqué jusqu'à ce que vous ayez saisi le vôtre. Ce n'est pas de la méfiance : un compteur qui voit l'attendu ne compte pas, il recopie.</p>
+        </div>
+      </article>
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Préparateur</h3>
+          <span class="who">En cuisine, avant et pendant le service</span>
+          <span class="count pill">5 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours du préparateur : voir ce qu&#x27;il y a à préparer, lancer un lot, transférer au comptoir, déclarer les ratés, compter un emplacement.">
+            <defs><marker id="rpa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">Ce qu&#x27;il y a</text>
+            <text x="16" y="71" class="t-lab">à préparer</text>
+            <text x="16" y="90" class="t-tiny">/production</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#rpa)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="56" class="t-lab">Je lance</text>
+            <text x="206" y="71" class="t-lab">un lot</text>
+            <text x="206" y="90" class="t-tiny">…/preparation</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#rpa)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Je transfère</text>
+            <text x="396" y="71" class="t-lab">au comptoir</text>
+            <text x="396" y="90" class="t-tiny">/stock/transfert</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#rpa)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="56" class="t-lab">Je déclare</text>
+            <text x="586" y="71" class="t-lab">les ratés</text>
+            <text x="586" y="90" class="t-tiny">/stock/perte</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#rpa)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="56" class="t-lab">Je compte</text>
+            <text x="776" y="71" class="t-lab">un emplacement</text>
+            <text x="776" y="90" class="t-tiny">/stock/inventaire</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>La quantité réellement sortie du lot</li>
+            <li>Ce qui a été raté, et pourquoi</li>
+            <li>Ce que vous déplacez d'un endroit à l'autre</li>
+            <li>Ce que vous comptez en rayon</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>Les ingrédients consommés, selon la recette</li>
+            <li>Le rendement du lot par rapport au prévu</li>
+            <li>Le coût de revient de ce que vous avez produit</li>
+            <li>L'écart entre le compté et le théorique</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Vous déclarez le réel, jamais le prévu.</b> Vous aviez prévu 30 parts, vous en sortez 27 : c'est 27 qu'on saisit. Les trois manquantes deviennent un rendement, pas une erreur à cacher.</p>
+        <p class="note gold"><b>Un transfert ne perd rien.</b> Ce qui sort de la cuisine entre au comptoir dans le même geste — deux mouvements liés. Vous ne pouvez pas transférer plus que ce qui est réellement là.</p>
+        </div>
+      </article>
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Approvisionneur</h3>
+          <span class="who">Au marché, chez les fournisseurs</span>
+          <span class="count pill">6 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours de l&#x27;approvisionneur : lire la liste de courses, passer commande, réceptionner, enregistrer les frais, vérifier le stock.">
+            <defs><marker id="raa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">La liste</text>
+            <text x="16" y="71" class="t-lab">de courses</text>
+            <text x="16" y="90" class="t-tiny">/appro</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#raa)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="56" class="t-lab">Je passe</text>
+            <text x="206" y="71" class="t-lab">commande</text>
+            <text x="206" y="90" class="t-tiny">/appro/commande</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#raa)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Je</text>
+            <text x="396" y="71" class="t-lab">réceptionne</text>
+            <text x="396" y="90" class="t-tiny">/appro/reception</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#raa)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="56" class="t-lab">J&#x27;enregistre</text>
+            <text x="586" y="71" class="t-lab">les frais</text>
+            <text x="586" y="90" class="t-tiny">/finance/depense</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#raa)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="56" class="t-lab">Je vérifie</text>
+            <text x="776" y="71" class="t-lab">l&#x27;entrée</text>
+            <text x="776" y="90" class="t-tiny">/stock</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>Ce que vous avez commandé, à qui, à quel prix</li>
+            <li>Ce qui est <em>réellement</em> arrivé, quantité par quantité</li>
+            <li>Le prix payé et le transport</li>
+            <li>Le moyen de paiement</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>La liste de courses elle-même, depuis les seuils et la vitesse de sortie</li>
+            <li>Le nouveau coût moyen pondéré de chaque article</li>
+            <li>Le reste à livrer quand la livraison est partielle</li>
+            <li>L'historique de prix par fournisseur</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Commandé n'est pas reçu.</b> Commandé 20 L, reçu 18 L : on saisit 18, et les 2 L restent dus. La réception enregistre ce qui est arrivé, pas ce qui était prévu.</p>
+        <p class="note gold"><b>Le transport entre dans le coût.</b> Les frais de livraison se répartissent sur la marchandise reçue. Un sac de café livré coûte plus cher qu'un sac de café acheté — c'est le second chiffre qui compte.</p>
+        </div>
+      </article>
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Responsable finance</h3>
+          <span class="who">En fin de journée, et le matin sur la veille</span>
+          <span class="count pill">8 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours du responsable finance : lire la journée, enregistrer les dépenses, suivre la trésorerie, clôturer, vérifier le journal.">
+            <defs><marker id="rfa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">Je lis</text>
+            <text x="16" y="71" class="t-lab">la journée</text>
+            <text x="16" y="90" class="t-tiny">/pilotage</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#rfa)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="56" class="t-lab">J&#x27;enregistre</text>
+            <text x="206" y="71" class="t-lab">les dépenses</text>
+            <text x="206" y="90" class="t-tiny">/finance/depense</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#rfa)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Je suis</text>
+            <text x="396" y="71" class="t-lab">la trésorerie</text>
+            <text x="396" y="90" class="t-tiny">/finance/tresorerie</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#rfa)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="56" class="t-lab">Je clôture</text>
+            <text x="586" y="71" class="t-lab">la journée</text>
+            <text x="586" y="90" class="t-tiny">/finance/caisse</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#rfa)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="56" class="t-lab">Je vérifie</text>
+            <text x="776" y="71" class="t-lab">le journal</text>
+            <text x="776" y="90" class="t-tiny">/pilotage/journal</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>Chaque dépense : montant, catégorie, moyen de paiement</li>
+            <li>Le relevé Mobile Money et carte, au moment du rapprochement</li>
+            <li>Les motifs d'écart, quand il y en a</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>La trésorerie disponible, moyen de paiement par moyen de paiement</li>
+            <li>L'écart entre l'encaissé déclaré et l'encaissé enregistré</li>
+            <li>La marge de la journée, une fois les dépenses imputées</li>
+            <li>Ce qu'il reste à sortir dans les prochains jours</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Rentable ne veut pas dire liquide.</b> Une journée peut dégager de la marge et vider la caisse. C'est la raison d'être de l'écran Trésorerie : il répond à « est-ce qu'on peut payer le laitier demain matin, en espèces ? »</p>
+        <p class="note gold"><b>Une dépense qui dépasse la caisse devient une dette.</b> Si vous payez une charge avec de l'argent emprunté, l'emprunt reste inscrit et visible jusqu'à son remboursement. Il ne disparaît pas dans le total des dépenses.</p>
+        </div>
+      </article>
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Manager</h3>
+          <span class="who">Partout, et sur tout ce qui coince</span>
+          <span class="count pill">24 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours du manager : prendre la température, traiter les alertes, solder les écarts, ajuster les réglages, clôturer.">
+            <defs><marker id="rma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">La température</text>
+            <text x="16" y="71" class="t-lab">du jour</text>
+            <text x="16" y="90" class="t-tiny">/pilotage</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#rma)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="56" class="t-lab">Les alertes</text>
+            <text x="206" y="71" class="t-lab">à traiter</text>
+            <text x="206" y="90" class="t-tiny">/alertes</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#rma)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Les écarts</text>
+            <text x="396" y="71" class="t-lab">à solder</text>
+            <text x="396" y="90" class="t-tiny">/stock/ecarts</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#rma)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="60" class="t-lab">Les réglages</text>
+            <text x="586" y="90" class="t-tiny">/pilotage/catalogue</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#rma)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box-b"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="60" class="t-lab">La clôture</text>
+            <text x="776" y="90" class="t-tiny">/finance/caisse</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>Le motif de chaque écart : perte, vol, offert, erreur de saisie</li>
+            <li>Les prix de vente et les seuils du catalogue</li>
+            <li>Qui reçoit quel accès, opération par opération</li>
+            <li>L'annulation d'une vente, avec sa raison</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>Le classement des écarts par source : caisse, stock, rendement, dette</li>
+            <li>Ce que les écarts non soldés coûtent réellement</li>
+            <li>La liste de courses et les alertes de rupture</li>
+            <li>Les marges par produit et les heures les plus rentables</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Un écart est une question, pas une information.</b> Tant qu'il n'est pas soldé, il reste ouvert et compté. Soldé « erreur de saisie », il ne coûte rien ; soldé « perte » ou « vol », il coûte, et le tableau de bord l'additionne.</p>
+        <p class="note gold"><b>Vous avez 24 opérations sur 25.</b> La seule que vous n'avez pas est « rouvrir une journée clôturée ». Elle appartient au propriétaire.</p>
+        </div>
+      </article>
+
+      <article class="role">
+        <div class="role-head">
+          <h3>Propriétaire</h3>
+          <span class="who">À distance, sur les chiffres</span>
+          <span class="count pill">25 opérations par défaut</span>
+        </div>
+        <div class="role-body">
+          <div class="scroller">
+          <svg viewBox="0 0 920 116" role="img" aria-label="Parcours du propriétaire : tableau de bord, trésorerie, marges par produit, journal, et la réouverture d&#x27;une journée.">
+            <defs><marker id="roa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker></defs>
+            <rect x="4" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="16" y="36" class="t-step">1</text>
+            <text x="16" y="56" class="t-lab">Le tableau</text>
+            <text x="16" y="71" class="t-lab">de bord</text>
+            <text x="16" y="90" class="t-tiny">/pilotage</text>
+            <line x1="161" y1="58" x2="189" y2="58" class="edge-b" marker-end="url(#roa)"/>
+            <rect x="194" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="206" y="36" class="t-step">2</text>
+            <text x="206" y="60" class="t-lab">La trésorerie</text>
+            <text x="206" y="90" class="t-tiny">/finance/tresorerie</text>
+            <line x1="351" y1="58" x2="379" y2="58" class="edge-b" marker-end="url(#roa)"/>
+            <rect x="384" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="396" y="36" class="t-step">3</text>
+            <text x="396" y="56" class="t-lab">Les marges</text>
+            <text x="396" y="71" class="t-lab">par produit</text>
+            <text x="396" y="90" class="t-tiny">/pilotage</text>
+            <line x1="541" y1="58" x2="569" y2="58" class="edge-b" marker-end="url(#roa)"/>
+            <rect x="574" y="18" width="152" height="80" rx="6" class="box"/>
+            <text x="586" y="36" class="t-step">4</text>
+            <text x="586" y="60" class="t-lab">Le journal</text>
+            <text x="586" y="90" class="t-tiny">/pilotage/journal</text>
+            <line x1="731" y1="58" x2="759" y2="58" class="edge-b" marker-end="url(#roa)"/>
+            <rect x="764" y="18" width="152" height="80" rx="6" class="box-crit"/>
+            <text x="776" y="36" class="t-step">5</text>
+            <text x="776" y="56" class="t-lab">Rouvrir</text>
+            <text x="776" y="71" class="t-lab">une journée</text>
+            <text x="776" y="90" class="t-tiny">/finance/caisse</text>
+          </svg>
+          </div>
+          <div class="split">
+            <div class="declare">
+              <span class="lab">Ce que vous déclarez</span>
+              <ul>
+            <li>Le motif d'une réouverture — et rien d'autre, en temps normal</li>
+              </ul>
+            </div>
+            <div class="derive derived">
+              <span class="lab">Ce que le système en déduit</span>
+              <ul>
+            <li>Tout le reste : chiffre d'affaires, marge, trésorerie, écarts</li>
+            <li>Qui a fait quoi, quand, depuis quel appareil, sous quelle autorisation</li>
+            <li>Les produits qui portent la marge et ceux qui la mangent</li>
+              </ul>
+            </div>
+          </div>
+        <p class="note"><b>Rouvrir n'annule pas.</b> La clôture reste dans l'historique, le motif de réouverture s'y ajoute. On ne réécrit pas le passé, on écrit qu'on y est revenu.</p>
+        <p class="note gold"><b>Vous êtes le seul à tout avoir.</b> Les 25 opérations, par défaut. C'est aussi vous qui pouvez tout redistribuer depuis l'écran Équipe.</p>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 5 -->
+  <section class="chapter" id="ch5">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 05</span>
+      <h2>Quatre flux, de bout en bout</h2>
+      <p class="intro">
+        Les quatre gestes qui font tourner la maison, suivis depuis l'appui sur l'écran
+        jusqu'au chiffre qu'ils déplacent. Si vous ne deviez comprendre qu'une chose de
+        ce manuel, c'est la colonne dorée&nbsp;: elle liste ce que personne n'a besoin de
+        saisir.
+      </p>
+    </div>
+
+    <div class="stack">
+
+      <!-- ---------------------------------------------- Vente -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 306" role="img" aria-label="Une vente : grille, panier, encaissement, reçu. L'encaissement crée le fait daté qui produit les sorties de stock, le coût figé, la marge et les espèces attendues.">
+          <defs>
+            <marker id="f5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker>
+            <marker id="f5g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahg"/></marker>
+          </defs>
+
+          <text x="20" y="26" class="t-edge">OBJECTIF DU COMPTOIR · MOINS DE 10 SECONDES, 3 À 5 APPUIS</text>
+
+          <rect x="20"  y="40" width="180" height="66" rx="6" class="box-b"/>
+          <text x="110" y="66"  class="t-lab" text-anchor="middle">La grille</text>
+          <text x="110" y="84"  class="t-sub" text-anchor="middle">un appui ajoute,</text>
+          <text x="110" y="98"  class="t-sub" text-anchor="middle">un appui long retire</text>
+
+          <rect x="258" y="40" width="180" height="66" rx="6" class="box-b"/>
+          <text x="348" y="66"  class="t-lab" text-anchor="middle">Le panier</text>
+          <text x="348" y="84"  class="t-sub" text-anchor="middle">on ajuste sans</text>
+          <text x="348" y="98"  class="t-sub" text-anchor="middle">quitter le flux</text>
+
+          <rect x="496" y="40" width="180" height="66" rx="6" class="box-strong"/>
+          <text x="586" y="66"  class="t-lab t-inv" text-anchor="middle">L'encaissement</text>
+          <text x="586" y="84"  class="t-sub t-inv" text-anchor="middle">espèces, Mobile Money,</text>
+          <text x="586" y="98"  class="t-sub t-inv" text-anchor="middle">carte ou autre</text>
+
+          <rect x="734" y="40" width="180" height="66" rx="6" class="box-b"/>
+          <text x="824" y="66"  class="t-lab" text-anchor="middle">Le reçu</text>
+          <text x="824" y="84"  class="t-sub" text-anchor="middle">montre la marge</text>
+          <text x="824" y="98"  class="t-sub" text-anchor="middle">de la vente</text>
+
+          <line x1="204" y1="73" x2="250" y2="73" class="edge-b" marker-end="url(#f5a)"/>
+          <line x1="442" y1="73" x2="488" y2="73" class="edge-b" marker-end="url(#f5a)"/>
+          <line x1="680" y1="73" x2="726" y2="73" class="edge-b" marker-end="url(#f5a)"/>
+
+          <line x1="586" y1="106" x2="586" y2="146" class="edge-g" marker-end="url(#f5g)"/>
+          <text x="596" y="130" class="t-edge">le fait est créé ici</text>
+
+          <rect x="120" y="150" width="700" height="130" rx="6" class="box-g"/>
+          <text x="140" y="174" class="t-lab t-gold">Ce que la vente déclenche, sans que personne ne le saisisse</text>
+          <text x="140" y="200" class="t-mono">CAFÉ AU LAIT −3 · COMPTOIR</text>
+          <text x="470" y="200" class="t-mono">Coût de revient figé à cet instant</text>
+          <text x="140" y="222" class="t-mono">Marge de la vente et du jour</text>
+          <text x="470" y="222" class="t-mono">Espèces attendues en caisse : +3 000</text>
+          <text x="140" y="244" class="t-mono">Recalcul des seuils → alerte si rupture</text>
+          <text x="470" y="244" class="t-mono">Ligne au journal, à votre nom</text>
+          <text x="140" y="268" class="t-sub">Aucun de ces chiffres n'est saisi. Aucun n'a besoin d'être corrigé.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Une vente.</b> Le fait naît à l'encaissement, pas avant&nbsp;: tant que vous êtes
+          dans le panier, rien n'est enregistré et vous pouvez tout défaire. Une fois encaissée,
+          la vente ne se supprime plus — elle s'annule, avec un motif, et l'annulation compense
+          par des mouvements inverses.
+        </figcaption>
+      </figure>
+
+      <!-- --------------------------------- Réception & coût moyen -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 288" role="img" aria-label="Une réception change le coût moyen pondéré : 10 litres à 700 francs plus 20 litres à 760 francs donnent 30 litres à 740 francs le litre.">
+          <text x="20" y="26" class="t-edge">CE QUE CHANGE UNE RÉCEPTION · LE COÛT MOYEN PONDÉRÉ</text>
+
+          <rect x="20" y="46" width="250" height="112" rx="6" class="box"/>
+          <text x="40" y="70"  class="t-sub">AVANT</text>
+          <text x="40" y="100" class="t-lab">Lait entier</text>
+          <text x="40" y="124" class="t-mono">10 L en réserve</text>
+          <text x="40" y="146" class="t-mono">700 FCFA / L</text>
+
+          <text x="290" y="112" class="t-lab" text-anchor="middle" style="font-size:22px">+</text>
+
+          <rect x="310" y="46" width="250" height="112" rx="6" class="box-b"/>
+          <text x="330" y="70"  class="t-sub">CE QUE VOUS DÉCLAREZ</text>
+          <text x="330" y="100" class="t-lab">Livraison reçue</text>
+          <text x="330" y="124" class="t-mono">20 L réellement arrivés</text>
+          <text x="330" y="146" class="t-mono">760 FCFA / L, transport inclus</text>
+
+          <text x="590" y="112" class="t-lab" text-anchor="middle" style="font-size:22px">=</text>
+
+          <rect x="620" y="46" width="300" height="112" rx="6" class="box-g"/>
+          <text x="640" y="70"  class="t-sub t-gold">CE QUE LE SYSTÈME EN DÉDUIT</text>
+          <text x="640" y="100" class="t-lab">Nouveau coût moyen</text>
+          <text x="640" y="124" class="t-mono">30 L en réserve</text>
+          <text x="640" y="146" class="t-mono t-gold" style="font-size:14px">740 FCFA / L</text>
+
+          <rect x="20" y="178" width="900" height="92" rx="6" class="box"/>
+          <text x="40" y="202" class="t-mono" style="font-size:13px">( 10 L × 700 ) + ( 20 L × 760 )  =  22 200 FCFA pour 30 L</text>
+          <text x="40" y="226" class="t-mono t-gold" style="font-size:13px">22 200 ÷ 30  =  740 FCFA le litre</text>
+          <text x="40" y="254" class="t-sub">À partir de cet instant, toutes les marges se calculent sur 740 — plus jamais sur 700. C'est ce qui empêche de croire qu'on gagne encore ce qu'on gagnait le mois dernier.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Une réception.</b> On saisit ce qui est <em>réellement</em> arrivé, pas ce qui
+          était commandé&nbsp;: commandé 20&nbsp;L, reçu 18&nbsp;L, il reste 2&nbsp;L dus. Le prix
+          payé et le transport entrent ensemble dans le coût, et le nouveau coût moyen se
+          propage immédiatement à toutes les marges.
+        </figcaption>
+      </figure>
+
+      <!-- ------------------------------------------ Préparation -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 244" role="img" aria-label="Une préparation : on choisit la recette, on déclare la quantité réellement sortie, le système déduit les ingrédients consommés, le rendement et le coût unitaire.">
+          <defs>
+            <marker id="f6a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker>
+            <marker id="f6g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahg"/></marker>
+          </defs>
+
+          <text x="20" y="26" class="t-edge">UNE PRÉPARATION · VOUS DÉCLAREZ LE RÉEL, JAMAIS LE PRÉVU</text>
+
+          <rect x="20" y="46" width="200" height="90" rx="6" class="box"/>
+          <text x="40" y="72"  class="t-lab">Je choisis</text>
+          <text x="40" y="90"  class="t-lab">la recette</text>
+          <text x="40" y="114" class="t-sub">L'écran dit d'avance</text>
+          <text x="40" y="128" class="t-sub">combien de parts sont possibles</text>
+
+          <line x1="224" y1="91" x2="266" y2="91" class="edge-b" marker-end="url(#f6a)"/>
+
+          <rect x="272" y="46" width="220" height="90" rx="6" class="box-strong"/>
+          <text x="292" y="72"  class="t-lab t-inv">Je déclare</text>
+          <text x="292" y="90"  class="t-lab t-inv">27 parts sorties</text>
+          <text x="292" y="114" class="t-sub t-inv">Prévu : 30. On saisit 27.</text>
+          <text x="292" y="128" class="t-sub t-inv">Le manque n'est pas une faute.</text>
+
+          <line x1="496" y1="91" x2="538" y2="91" class="edge-g" marker-end="url(#f6g)"/>
+
+          <rect x="544" y="34" width="376" height="176" rx="6" class="box-g"/>
+          <text x="564" y="58"  class="t-lab t-gold">Ce que le système en déduit</text>
+          <text x="564" y="84"  class="t-mono">LAIT −4,5 L · CAFÉ MOULU −540 g</text>
+          <text x="564" y="106" class="t-mono">consommés selon la recette, en cuisine</text>
+          <text x="564" y="134" class="t-mono">CAFÉ GLACÉ +27 · entrée en stock</text>
+          <text x="564" y="160" class="t-mono">Rendement : 27 / 30 = 90 %</text>
+          <text x="564" y="182" class="t-mono">Coût de revient d'une part, recalculé</text>
+          <text x="564" y="200" class="t-sub">Un rendement qui décroche devient une alerte.</text>
+
+          <text x="20" y="176" class="t-sub">Une recette déjà utilisée</text>
+          <text x="20" y="192" class="t-sub">est gelée : la modifier crée</text>
+          <text x="20" y="208" class="t-sub">une nouvelle version, et les</text>
+          <text x="20" y="224" class="t-sub">lots passés gardent la leur.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Une préparation.</b> Vous ne calculez jamais la consommation d'ingrédients&nbsp;:
+          vous déclarez ce qui est sorti, le reste se déduit de la recette. Le rendement est
+          la seule chose que l'application surveille pour vous — trois lots à 90&nbsp;% de suite,
+          et c'est la recette ou le dosage qu'il faut regarder, pas la personne.
+        </figcaption>
+      </figure>
+
+      <!-- -------------------------------------------- Inventaire -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 232" role="img" aria-label="Un inventaire à l'aveugle : on compte sans voir le théorique, on valide, le système révèle l'écart, on donne un motif et un mouvement d'ajustement est émis.">
+          <defs>
+            <marker id="f7a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker>
+            <marker id="f7g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahg"/></marker>
+          </defs>
+
+          <text x="20" y="26" class="t-edge">UN INVENTAIRE · À L'AVEUGLE, PUIS RÉVÉLÉ</text>
+
+          <rect x="20" y="44" width="204" height="102" rx="6" class="box-b"/>
+          <text x="36" y="66"  class="t-step">1</text>
+          <text x="36" y="88"  class="t-lab">Je compte</text>
+          <text x="36" y="112" class="t-sub">Le théorique reste masqué.</text>
+          <text x="36" y="128" class="t-sub">Vous ne pouvez pas le recopier.</text>
+
+          <line x1="228" y1="95" x2="246" y2="95" class="edge-b" marker-end="url(#f7a)"/>
+
+          <rect x="252" y="44" width="204" height="102" rx="6" class="box-b"/>
+          <text x="268" y="66"  class="t-step">2</text>
+          <text x="268" y="88"  class="t-lab">Je valide ma saisie</text>
+          <text x="268" y="112" class="t-sub">« J'ai compté 7,5 L de lait »</text>
+
+          <line x1="460" y1="95" x2="478" y2="95" class="edge-g" marker-end="url(#f7g)"/>
+
+          <rect x="484" y="44" width="204" height="102" rx="6" class="box-g"/>
+          <text x="500" y="66"  class="t-step t-gold">3</text>
+          <text x="500" y="88"  class="t-lab t-gold">L'écart apparaît</text>
+          <text x="500" y="112" class="t-mono">Théorique 9,0 L · compté 7,5</text>
+          <text x="500" y="130" class="t-mono">Manque 1,5 L — soit 1 110 FCFA</text>
+
+          <line x1="692" y1="95" x2="710" y2="95" class="edge-b" marker-end="url(#f7a)"/>
+
+          <rect x="716" y="44" width="204" height="102" rx="6" class="box-b"/>
+          <text x="732" y="66"  class="t-step">4</text>
+          <text x="732" y="88"  class="t-lab">Je donne un motif</text>
+          <text x="732" y="112" class="t-sub">Casse · Périmé · Surdosage</text>
+          <text x="732" y="128" class="t-sub">Invendu · Inconnue</text>
+
+          <rect x="20" y="164" width="900" height="52" rx="6" class="box"/>
+          <text x="40" y="190" class="t-lab">Le stock n'est jamais écrasé.</text>
+          <text x="238" y="190" class="t-sub">L'inventaire n'écrit pas « il y a 7,5 L ». Il ajoute un mouvement d'ajustement de −1,5 L,</text>
+          <text x="238" y="208" class="t-sub">avec son motif et votre nom. Le total tombe juste, et on sait pourquoi.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Un inventaire.</b> Le théorique est volontairement caché jusqu'à votre saisie&nbsp;:
+          un compteur qui voit l'attendu ne compte pas, il recopie. Une fois l'écart révélé, il
+          devient une question ouverte — et c'est le motif qui la referme.
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 6 -->
+  <section class="chapter" id="ch6">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 06</span>
+      <h2>La clôture&nbsp;: cinq étapes, dans l'ordre, puis la journée se verrouille</h2>
+      <p class="intro">
+        C'est le moment où la journée devient un chiffre. Chaque étape suit la même
+        forme&nbsp;: vous déclarez ce que vous avez constaté, l'application révèle ce qu'elle
+        attendait, et l'écart — s'il y en a un — demande une explication avant de laisser
+        passer.
+      </p>
+    </div>
+
+    <div class="stack">
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 616" role="img" aria-label="Les cinq étapes de la clôture : comptage de caisse, rapprochement des ventes, écarts de stock, dépenses, validation finale qui verrouille la journée.">
+          <defs>
+            <marker id="f8a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker>
+          </defs>
+
+          <text x="20" y="24" class="t-edge">ON NE SAUTE PAS UNE ÉTAPE · REVENIR SUR L'UNE FAIT TOMBER LES SUIVANTES</text>
+
+          <line x1="44" y1="82" x2="44" y2="482" class="edge-b"/>
+
+          <!-- Étape 1 -->
+          <circle cx="44" cy="82" r="15" class="box-strong"/>
+          <text x="44" y="87" class="t-step t-inv" text-anchor="middle">1</text>
+          <rect x="80" y="40" width="840" height="84" rx="6" class="box"/>
+          <line x1="490" y1="52" x2="490" y2="112" class="edge-g"/>
+          <text x="98" y="64"  class="t-lab">Comptage de caisse</text>
+          <text x="98" y="86"  class="t-sub">« J'ai compté 143 500 FCFA dans le tiroir. »</text>
+          <text x="98" y="106" class="t-tiny">SAISIE À L'AVEUGLE — L'ATTENDU EST MASQUÉ</text>
+          <text x="508" y="64"  class="t-mono t-gold">Attendu = fond de caisse + ventes espèces − dépenses espèces</text>
+          <text x="508" y="86"  class="t-mono">L'écart de caisse — au-delà de 500 FCFA, un motif est demandé</text>
+          <text x="508" y="106" class="t-mono">Au-delà de 2 000 FCFA, le manager est prévenu</text>
+
+          <!-- Étape 2 -->
+          <circle cx="44" cy="182" r="15" class="box-strong"/>
+          <text x="44" y="187" class="t-step t-inv" text-anchor="middle">2</text>
+          <rect x="80" y="140" width="840" height="84" rx="6" class="box"/>
+          <line x1="490" y1="152" x2="490" y2="212" class="edge-g"/>
+          <text x="98" y="164"  class="t-lab">Rapprochement des ventes</text>
+          <text x="98" y="186"  class="t-sub">« Mon relevé Mobile Money affiche 88 000 FCFA. »</text>
+          <text x="98" y="206"  class="t-tiny">UN CANAL À LA FOIS · LES ESPÈCES ONT DÉJÀ ÉTÉ FAITES</text>
+          <text x="508" y="164"  class="t-mono t-gold">Le total encaissé par canal, calculé depuis les ventes</text>
+          <text x="508" y="186"  class="t-mono">L'écart canal par canal</text>
+          <text x="508" y="206"  class="t-mono">Les ventes annulées de la journée, listées</text>
+
+          <!-- Étape 3 -->
+          <circle cx="44" cy="282" r="15" class="box-strong"/>
+          <text x="44" y="287" class="t-step t-inv" text-anchor="middle">3</text>
+          <rect x="80" y="240" width="840" height="84" rx="6" class="box"/>
+          <line x1="490" y1="252" x2="490" y2="312" class="edge-g"/>
+          <text x="98" y="264"  class="t-lab">Pertes et écarts de stock</text>
+          <text x="98" y="286"  class="t-sub">« J'ai compté 7,5 L de lait. »</text>
+          <text x="98" y="306"  class="t-tiny">SEULEMENT LES ARTICLES QUI COMPTENT VRAIMENT</text>
+          <text x="508" y="264"  class="t-mono t-gold">Le théorique, projeté depuis les mouvements de la journée</text>
+          <text x="508" y="286"  class="t-mono">L'écart valorisé au coût moyen — en argent, pas en grammes</text>
+          <text x="508" y="306"  class="t-mono">Un mouvement d'ajustement motivé, au-delà de 1 000 FCFA</text>
+
+          <!-- Étape 4 -->
+          <circle cx="44" cy="382" r="15" class="box-strong"/>
+          <text x="44" y="387" class="t-step t-inv" text-anchor="middle">4</text>
+          <rect x="80" y="340" width="840" height="84" rx="6" class="box"/>
+          <line x1="490" y1="352" x2="490" y2="412" class="edge-g"/>
+          <text x="98" y="364"  class="t-lab">Dépenses de la journée</text>
+          <text x="98" y="386"  class="t-sub">« Je confirme les dépenses enregistrées aujourd'hui. »</text>
+          <text x="98" y="406"  class="t-tiny">RIEN N'EST MASQUÉ ICI — ON RELIT, ON NE COMPTE PAS</text>
+          <text x="508" y="364"  class="t-mono t-gold">Le total par catégorie</text>
+          <text x="508" y="386"  class="t-mono">La part payée en espèces — c'est elle qui explique l'étape 1</text>
+          <text x="508" y="406"  class="t-mono">Les emprunts en cours, s'il y en a</text>
+
+          <!-- Étape 5 -->
+          <circle cx="44" cy="482" r="15" class="box-strong"/>
+          <text x="44" y="487" class="t-step t-inv" text-anchor="middle">5</text>
+          <rect x="80" y="440" width="840" height="84" rx="6" class="box-b"/>
+          <line x1="490" y1="452" x2="490" y2="512" class="edge-g"/>
+          <text x="98" y="464"  class="t-lab">Validation de la journée</text>
+          <text x="98" y="486"  class="t-sub">« Je clôture la journée. »</text>
+          <text x="98" y="506"  class="t-tiny">DEMANDE L'ACCÈS « CLÔTURER LA JOURNÉE »</text>
+          <text x="508" y="464"  class="t-mono t-gold">Le récapitulatif du jour, les quatre étapes réunies</text>
+          <text x="508" y="486"  class="t-mono">Verrouillage : plus aucun fait daté de ce jour n'entre</text>
+          <text x="508" y="506"  class="t-mono">Seul le propriétaire peut rouvrir, avec un motif</text>
+
+          <line x1="500" y1="524" x2="500" y2="548" class="edge-b" marker-end="url(#f8a)"/>
+          <rect x="80" y="552" width="840" height="48" rx="6" class="box-ok"/>
+          <text x="98" y="582" class="t-lab">Journée close.</text>
+          <text x="212" y="582" class="t-sub">Le chiffre du soir est arrêté, et chaque écart qui le compose porte un motif et un nom.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>La clôture.</b> Les trois premières étapes se font à l'aveugle&nbsp;: vous déclarez
+          avant de voir. Les seuils de tolérance — 500 FCFA sur la caisse et les canaux,
+          1&nbsp;000 FCFA sur le stock — décident de ce qui demande une explication&nbsp;: en dessous,
+          l'écart existe mais ne fait pas faute, rendre la monnaie produit toujours quelques
+          pièces de décalage.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 7 -->
+  <section class="chapter" id="ch7">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 07</span>
+      <h2>Sans réseau, tout continue</h2>
+      <p class="intro">
+        C'est une règle de conception, pas une tolérance&nbsp;: <strong>aucune écriture
+        n'attend le réseau</strong>. Une vente qui échouerait parce que le wifi est tombé
+        serait un défaut bloquant. Vous encaissez, l'application enregistre, et l'envoi
+        se débrouille tout seul quand la connexion revient.
+      </p>
+    </div>
+
+    <div class="stack">
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 326" role="img" aria-label="Le trajet d'un fait dans la file : enregistré sur l'appareil, mis en file, envoyé, puis accepté, ou refusé et sorti de la file, ou en échec réseau et réessayé avec un délai croissant.">
+          <defs>
+            <marker id="f9a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ah"/></marker>
+            <marker id="f9b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ahb"/></marker>
+          </defs>
+
+          <text x="20" y="24" class="t-edge">LE TRAJET D'UN FAIT · VOUS N'AVEZ RIEN À FAIRE À AUCUNE ÉTAPE</text>
+
+          <rect x="20" y="96" width="180" height="72" rx="6" class="box-b"/>
+          <text x="110" y="124" class="t-lab" text-anchor="middle">Enregistré</text>
+          <text x="110" y="144" class="t-sub" text-anchor="middle">sur votre appareil,</text>
+          <text x="110" y="158" class="t-sub" text-anchor="middle">tout de suite</text>
+
+          <line x1="204" y1="132" x2="242" y2="132" class="edge-b" marker-end="url(#f9b)"/>
+
+          <rect x="250" y="96" width="180" height="72" rx="6" class="box-b"/>
+          <text x="340" y="124" class="t-lab" text-anchor="middle">Dans la file</text>
+          <text x="340" y="144" class="t-sub" text-anchor="middle">survit au redémarrage</text>
+          <text x="340" y="158" class="t-sub" text-anchor="middle">et à la fermeture</text>
+
+          <line x1="434" y1="132" x2="472" y2="132" class="edge-b" marker-end="url(#f9b)"/>
+
+          <rect x="480" y="96" width="180" height="72" rx="6" class="box"/>
+          <text x="570" y="124" class="t-lab" text-anchor="middle">Envoi en cours</text>
+          <text x="570" y="144" class="t-sub" text-anchor="middle">toutes les 60 secondes,</text>
+          <text x="570" y="158" class="t-sub" text-anchor="middle">et au retour de la connexion</text>
+
+          <line x1="660" y1="132" x2="696" y2="132" class="edge"/>
+          <line x1="696" y1="132" x2="722" y2="66"  class="edge" marker-end="url(#f9a)"/>
+          <line x1="696" y1="132" x2="722" y2="132" class="edge" marker-end="url(#f9a)"/>
+          <line x1="696" y1="132" x2="722" y2="220" class="edge" marker-end="url(#f9a)"/>
+
+          <rect x="730" y="36" width="190" height="62" rx="6" class="box-ok"/>
+          <text x="748" y="60"  class="t-lab">Accepté</text>
+          <text x="748" y="80"  class="t-sub">Terminé. Rien à faire.</text>
+
+          <rect x="730" y="116" width="190" height="62" rx="6" class="box-crit"/>
+          <text x="748" y="140" class="t-lab">Refusé</text>
+          <text x="748" y="160" class="t-sub">Sort de la file, pour de bon.</text>
+
+          <rect x="730" y="196" width="190" height="62" rx="6" class="box-watch"/>
+          <text x="748" y="220" class="t-lab">Réseau coupé</text>
+          <text x="748" y="240" class="t-sub">On réessaiera tout seul.</text>
+
+          <path d="M 825 262 L 825 306 L 340 306 L 340 174" class="edge-d" marker-end="url(#f9a)"/>
+          <text x="582" y="294" class="t-edge" text-anchor="middle">NOUVELLE TENTATIVE · LE DÉLAI DOUBLE À CHAQUE ÉCHEC, JUSQU'À 30 SECONDES</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Trois issues, une seule se rejoue.</b> Un fait accepté est terminé. Un échec réseau
+          repart dans la file avec un délai qui double, pour ne pas marteler la connexion. Un
+          refus, lui, ne se rejoue jamais&nbsp;: le serveur a dit non pour une raison métier, et
+          réessayer donnerait le même non. Il devient visible tel quel dans votre activité.
+        </figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="mini">
+          <h4>Le compteur en haut de l'écran</h4>
+          <p>Il indique combien de faits attendent d'être envoyés. Un chiffre qui monte n'est
+          pas une erreur&nbsp;— c'est simplement que la connexion est absente. Il redescend seul.</p>
+        </div>
+        <div class="mini">
+          <h4>Plusieurs appareils hors ligne</h4>
+          <p>Deux téléphones peuvent vendre en même temps sans réseau. Comme chacun envoie des
+          faits datés et non un état, le serveur les remet dans l'ordre sans avoir à arbitrer.</p>
+        </div>
+        <div class="mini">
+          <h4>Le double envoi est sans effet</h4>
+          <p>Chaque fait porte un numéro unique créé sur l'appareil, avant toute connexion. Le
+          serveur le reconnaît&nbsp;: un envoi répété renvoie la même vente, il n'en crée pas une seconde.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 8 -->
+  <section class="chapter" id="ch8">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 08</span>
+      <h2>Fixer ses prix sans vendre à perte</h2>
+      <p class="intro">
+        Ce chapitre ne décrit pas l'application&nbsp;: ne cherchez pas d'écran « prix
+        conseillé », il n'y en a pas et il n'y en aura pas. L'application vous donne le
+        coût réel et la marge de chaque produit&nbsp;; <strong>le prix, c'est vous qui le
+        décidez</strong>. Voici le cadre pour le décider avec des chiffres plutôt qu'au
+        jugé.
+      </p>
+    </div>
+
+    <div class="stack">
+
+      <p class="note">
+        <b>La question à laquelle ce chapitre répond.</b> « À combien dois-je vendre ce café
+        pour couvrir ce qu'il m'a coûté, payer le loyer et les salaires à la fin du mois,
+        et qu'il reste quelque chose&nbsp;? » Elle se traite en quatre temps&nbsp;: le coût du
+        produit, la part des charges fixes, le prix plancher, puis le prix affiché.
+      </p>
+
+      <!-- --------------------------------------- La pile du prix -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 940 278" role="img" aria-label="Décomposition d'un prix de 1000 francs : 312 de matière et emballage, 20 de perte moyenne, 265 de charges fixes, 403 de résultat. Le coût de revient variable est à 332 francs, le prix plancher à 597.">
+          <text x="60" y="22" class="t-edge">UN CAFÉ AU LAIT VENDU 1 000 FCFA · CE QUE LE PRIX DOIT PORTER</text>
+
+          <text x="460" y="42" class="t-mono" text-anchor="middle">PRIX AFFICHÉ · 1 000 FCFA</text>
+          <line x1="60"  y1="50" x2="60"  y2="62" class="edge"/>
+          <line x1="860" y1="50" x2="860" y2="62" class="edge"/>
+          <line x1="60"  y1="56" x2="860" y2="56" class="edge"/>
+
+          <text x="318" y="80" class="t-edge" text-anchor="middle">perte moyenne · 20</text>
+          <line x1="318" y1="84" x2="318" y2="96" class="edge"/>
+
+          <rect x="60"  y="96" width="250" height="58" class="box"/>
+          <rect x="310" y="96" width="16"  height="58" class="box-watch"/>
+          <rect x="326" y="96" width="212" height="58" class="box-info"/>
+          <rect x="538" y="96" width="322" height="58" class="box-ok"/>
+
+          <text x="74"  y="120" class="t-lab">Matière + emballage</text>
+          <text x="74"  y="141" class="t-mono">312 FCFA</text>
+          <text x="340" y="120" class="t-lab">Charges fixes</text>
+          <text x="340" y="141" class="t-mono">265 FCFA</text>
+          <text x="552" y="120" class="t-lab">Ce qui vous reste</text>
+          <text x="552" y="141" class="t-mono">403 FCFA</text>
+
+          <line x1="326" y1="154" x2="326" y2="180" class="edge-d"/>
+          <text x="334" y="176" class="t-mono">COÛT DE REVIENT · 332 FCFA</text>
+          <text x="334" y="194" class="t-sub">matière + casse ordinaire</text>
+
+          <line x1="538" y1="154" x2="538" y2="216" class="edge-d"/>
+          <text x="546" y="212" class="t-mono">PRIX PLANCHER · 597 FCFA</text>
+          <text x="546" y="230" class="t-sub">en dessous, chaque tasse vendue vous appauvrit</text>
+
+          <rect x="60" y="246" width="800" height="26" rx="4" class="box-g"/>
+          <text x="74" y="264" class="t-mono t-gold">Le plancher n'est pas un prix. C'est la limite. Le prix se choisit au-dessus.</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Un prix porte quatre choses.</b> La matière et l'emballage, la casse ordinaire,
+          une part des charges du mois, et ce qui reste. Tant que les trois premières ne sont
+          pas couvertes, vendre plus ne fait qu'aggraver la situation&nbsp;— c'est le piège
+          classique du commerce qui « tourne bien » et ne gagne rien.
+        </figcaption>
+      </figure>
+
+      <!-- ------------------------------- Étape 1 : le coût produit -->
+      <div class="card card-pad">
+        <span class="eyebrow">Temps 1</span>
+        <h3 style="margin:10px 0 4px">Le coût de revient d'un produit</h3>
+        <p style="font-size:14.5px;max-width:44em">
+          L'application connaît déjà la première moitié&nbsp;: le coût moyen pondéré de chaque
+          ingrédient, mis à jour à chaque réception. Il ne vous reste qu'à le corriger de la
+          casse ordinaire — parce qu'on ne vend jamais 100&nbsp;% de ce qu'on achète.
+        </p>
+        <div class="table-wrap" style="margin-top:16px">
+          <table>
+            <thead><tr><th>Ligne</th><th>Calcul</th><th class="num">FCFA</th></tr></thead>
+            <tbody>
+              <tr><th>Café moulu, 18 g</th><td class="mono">7 000 F/kg × 0,018</td><td class="num">126</td></tr>
+              <tr><th>Lait entier, 150 mL</th><td class="mono">900 F/L × 0,150</td><td class="num">135</td></tr>
+              <tr><th>Sucre, 8 g</th><td class="mono">700 F/kg × 0,008</td><td class="num">6</td></tr>
+              <tr><th>Gobelet + couvercle</th><td class="mono">prix d'achat unitaire</td><td class="num">45</td></tr>
+              <tr style="background:var(--card-2)"><th>Coût matière</th><td class="mono">somme</td><td class="num"><b>312</b></td></tr>
+              <tr class="derived-row"><th>Corrigé de la perte moyenne (6 %)</th><td class="mono">312 ÷ 0,94</td><td class="num"><b>332</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note gold" style="margin-top:16px">
+          <b>Pourquoi diviser et non multiplier.</b> Si 6&nbsp;% de votre lait finit à la
+          poubelle, il ne vous en reste que 94&nbsp;% à vendre&nbsp;: le coût de ce qui se vend
+          doit absorber ce qui ne s'est pas vendu. C'est <span class="mono">312 ÷ 0,94</span>,
+          pas <span class="mono">312 × 1,06</span>. L'écart est faible ici, il devient
+          considérable sur les produits frais à forte casse.
+        </p>
+      </div>
+
+      <!-- --------------------------- Étape 2 : les charges fixes -->
+      <div class="card card-pad">
+        <span class="eyebrow">Temps 2</span>
+        <h3 style="margin:10px 0 4px">Vos charges fixes, ramenées à une vente</h3>
+        <p style="font-size:14.5px;max-width:44em">
+          Le loyer tombe que vous vendiez 40 cafés ou 400. Il faut donc que chaque vente en
+          porte un morceau. C'est le calcul que presque personne ne fait, et c'est celui qui
+          sépare un commerce qui tourne d'un commerce qui gagne.
+        </p>
+        <div class="grid2" style="margin-top:16px">
+          <div class="table-wrap">
+            <table style="min-width:0">
+              <thead><tr><th>Charge du mois</th><th class="num">FCFA</th></tr></thead>
+              <tbody>
+                <tr><th>Loyer</th><td class="num">250 000</td></tr>
+                <tr><th>Salaires et charges (3 personnes)</th><td class="num">750 000</td></tr>
+                <tr><th>Électricité, eau, gaz</th><td class="num">120 000</td></tr>
+                <tr><th>Internet, téléphone, abonnements</th><td class="num">40 000</td></tr>
+                <tr><th>Entretien, machine</th><td class="num">80 000</td></tr>
+                <tr style="background:var(--card-2)"><th>Total mensuel</th><td class="num"><b>1 240 000</b></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="stack-sm">
+            <div class="split" style="grid-template-columns:1fr">
+              <div class="derive derived">
+                <span class="lab">Ce qu'on en tire</span>
+                <ul>
+                  <li><span class="mono">1 240 000 ÷ 26 jours</span> = <b>47 700 FCFA par jour</b></li>
+                  <li><span class="mono">47 700 ÷ 180 ventes</span> = <b>265 FCFA par vente</b></li>
+                </ul>
+              </div>
+            </div>
+            <p class="note">
+              <b>Attention au volume.</b> Cette part dépend de ce que vous vendez. À 120 ventes
+              par jour au lieu de 180, elle passe à <span class="mono">398 FCFA</span> et votre
+              prix plancher monte de 597 à <span class="mono">730 FCFA</span>. Un prix calculé
+              sur un bon mois ne tient pas en saison creuse&nbsp;— calculez sur votre volume bas,
+              pas sur votre meilleur.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------------------- Étape 3 : plancher et prix affiché -->
+      <div class="card card-pad">
+        <span class="eyebrow">Temps 3</span>
+        <h3 style="margin:10px 0 4px">Le plancher, puis le prix</h3>
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Repère</th><th>Calcul</th><th class="num">FCFA</th></tr></thead>
+            <tbody>
+              <tr><th>Coût de revient variable</th><td class="mono">matière corrigée de la perte</td><td class="num">332</td></tr>
+              <tr><th>Quote-part de charges fixes</th><td class="mono">47 700 ÷ 180</td><td class="num">265</td></tr>
+              <tr style="background:var(--card-2)"><th>Prix plancher</th><td class="mono">332 + 265</td><td class="num"><b>597</b></td></tr>
+              <tr><th>Prix affiché retenu</th><td class="mono">arrondi commercial</td><td class="num"><b>1 000</b></td></tr>
+              <tr><th>Marge sur coût variable</th><td class="mono">1 000 − 332</td><td class="num">668 &nbsp;<span style="color:var(--ink-faint)">(66,8 %)</span></td></tr>
+              <tr><th>Résultat par tasse</th><td class="mono">1 000 − 597</td><td class="num">403</td></tr>
+              <tr><th>Coefficient effectivement appliqué</th><td class="mono">1 000 ÷ 332</td><td class="num">× 3,0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ------------------------------- Les trois méthodes -->
+      <div>
+        <h3 style="margin-bottom:6px">Trois façons de poser le prix au-dessus du plancher</h3>
+        <p style="font-size:14.5px;max-width:44em;margin-bottom:14px">
+          Elles ne s'excluent pas&nbsp;: on en utilise une pour proposer un chiffre, une autre
+          pour le vérifier. La seule règle non négociable est le plancher.
+        </p>
+        <div class="grid3">
+          <div class="mini">
+            <span class="pill">Méthode 1</span>
+            <h4 style="margin-top:10px">Le coefficient</h4>
+            <p><span class="mono">prix = coût × k</span></p>
+            <p style="margin-top:8px">Boissons chaudes <b>×3 à ×4</b>. Pâtisseries et plats
+            <b>×2,5 à ×3</b>. Bouteilles revendues telles quelles <b>×2 à ×2,5</b>. Rapide,
+            utile comme repère — mais un coefficient ne sait rien de votre loyer.</p>
+          </div>
+          <div class="mini">
+            <span class="pill">Méthode 2</span>
+            <h4 style="margin-top:10px">La marge cible</h4>
+            <p><span class="mono">prix = coût ÷ (1 − marge)</span></p>
+            <p style="margin-top:8px">Vous visez 65&nbsp;% de marge&nbsp;:
+            <span class="mono">332 ÷ 0,35 = 949</span>, arrondi à 1 000. C'est la méthode à
+            privilégier quand vous savez ce que vos charges exigent&nbsp;— elle part de votre
+            besoin, pas d'un usage.</p>
+          </div>
+          <div class="mini">
+            <span class="pill">Méthode 3</span>
+            <h4 style="margin-top:10px">Le marché</h4>
+            <p><span class="mono">ce que le quartier paie déjà</span></p>
+            <p style="margin-top:8px">Elle donne la limite haute et dit ce que votre prix
+            raconte de vous. Si le marché est <em>sous</em> votre plancher, ce n'est pas le
+            prix qu'il faut baisser&nbsp;: c'est le coût, la portion, ou le produit.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- --------------------------------------- Le point mort -->
+      <div class="split">
+        <div class="declare">
+          <span class="lab">La question</span>
+          <p class="quote">« Combien dois-je vendre par jour pour ne rien perdre&nbsp;? »</p>
+          <p style="font-size:14px;margin-top:10px;color:var(--ink-faint)">
+            C'est le point mort. Il se calcule une fois, et il change le regard qu'on porte
+            sur une journée creuse.
+          </p>
+        </div>
+        <div class="derive derived">
+          <span class="lab">Le calcul</span>
+          <ul>
+            <li>Charges fixes du mois&nbsp;: <span class="mono">1 240 000 FCFA</span></li>
+            <li>Marge moyenne par vente&nbsp;: <span class="mono">668 FCFA</span></li>
+            <li><span class="mono">1 240 000 ÷ 668 = 1 856 ventes / mois</span></li>
+            <li><b>Soit environ 72 ventes par jour</b> sur 26 jours.</li>
+          </ul>
+          <p style="font-size:13.5px;margin-top:10px;color:var(--ink-faint)">
+            En dessous de 72, la journée coûte de l'argent même si la caisse a sonné.
+            Au-dessus, chaque vente rapporte 668 FCFA nets.
+          </p>
+        </div>
+      </div>
+
+      <!-- --------------------------------- Quadrant du menu -->
+      <figure class="fig">
+        <div class="scroller">
+        <svg viewBox="0 0 760 412" role="img" aria-label="Quadrant du menu croisant la marge unitaire et le volume vendu : étoiles, énigmes, locomotives et poids morts, avec l'action à mener pour chacun.">
+          <defs>
+            <marker id="fqa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><polygon points="0,1 10,5 0,9" class="ah"/></marker>
+          </defs>
+
+          <text x="30" y="24" class="t-edge">CROISEZ VOS PRODUITS · MARGE × VOLUME</text>
+
+          <rect x="96" y="42" width="300" height="150" rx="6" class="box-watch"/>
+          <rect x="404" y="42" width="300" height="150" rx="6" class="box-ok"/>
+          <rect x="96" y="200" width="300" height="150" rx="6" class="box"/>
+          <rect x="404" y="200" width="300" height="150" rx="6" class="box-info"/>
+
+          <text x="116" y="72"  class="t-lab">Les énigmes</text>
+          <text x="116" y="96"  class="t-sub">Marge forte, peu vendus.</text>
+          <text x="116" y="120" class="t-mono">Changez-les de place au menu,</text>
+          <text x="116" y="138" class="t-mono">faites-les goûter, nommez-les mieux.</text>
+          <text x="116" y="164" class="t-sub">Le prix n'est presque jamais le problème.</text>
+
+          <text x="424" y="72"  class="t-lab">Vos étoiles</text>
+          <text x="424" y="96"  class="t-sub">Marge forte, très vendus.</text>
+          <text x="424" y="120" class="t-mono">N'y touchez pas. Protégez la qualité</text>
+          <text x="424" y="138" class="t-mono">et l'approvisionnement avant tout.</text>
+          <text x="424" y="164" class="t-sub">Ce sont eux qui paient le loyer.</text>
+
+          <text x="116" y="230" class="t-lab">Les poids morts</text>
+          <text x="116" y="254" class="t-sub">Marge faible, peu vendus.</text>
+          <text x="116" y="278" class="t-mono">Retirez-les, ou remplacez-les.</text>
+          <text x="116" y="296" class="t-mono">Ils immobilisent du stock et de la place.</text>
+          <text x="116" y="322" class="t-sub">Un menu plus court se tient mieux.</text>
+
+          <text x="424" y="230" class="t-lab">Les locomotives</text>
+          <text x="424" y="254" class="t-sub">Marge faible, très vendus.</text>
+          <text x="424" y="278" class="t-mono">Renégociez l'achat, revoyez la portion,</text>
+          <text x="424" y="296" class="t-mono">montez le prix par petits pas.</text>
+          <text x="424" y="322" class="t-sub">+50 FCFA sur un best-seller pèse lourd.</text>
+
+          <line x1="70" y1="356" x2="70" y2="38" class="edge" marker-end="url(#fqa)"/>
+          <line x1="88" y1="374" x2="710" y2="374" class="edge" marker-end="url(#fqa)"/>
+          <text x="62" y="200" class="t-edge" text-anchor="middle" transform="rotate(-90 62 200)">MARGE UNITAIRE →</text>
+          <text x="400" y="392" class="t-edge" text-anchor="middle">VOLUME VENDU →</text>
+        </svg>
+        </div>
+        <figcaption>
+          <b>Le quadrant du menu.</b> Le tableau de bord vous donne les deux axes&nbsp;: la marge
+          par produit et le volume vendu. Placez vos dix ou quinze articles principaux dans ces
+          quatre cases une fois par trimestre&nbsp;— l'action à mener n'est pas la même dans
+          chacune, et augmenter le prix n'est la bonne réponse que dans une seule.
+        </figcaption>
+      </figure>
+
+      <!-- ------------------------------- Quand relancer les prix -->
+      <div class="grid2">
+        <div class="card card-pad">
+          <span class="eyebrow">Les signaux que l'application vous donne</span>
+          <h3 style="margin:10px 0 10px">Quand rouvrir la question du prix</h3>
+          <ul style="margin:0;padding-left:18px;font-size:14.5px">
+            <li style="margin-bottom:8px">Le <b>coût moyen</b> d'un ingrédient a monté de plus
+            de 10&nbsp;% depuis la dernière révision. Votre marge a bougé sans que personne ne
+            l'ait décidé.</li>
+            <li style="margin-bottom:8px">Un produit passe <b>sous votre marge cible</b> dans
+            les marges par produit du tableau de bord.</li>
+            <li style="margin-bottom:8px">Le <b>rendement</b> d'une recette décroche&nbsp;: le
+            coût réel d'une part n'est plus celui que la recette annonce.</li>
+            <li style="margin-bottom:8px">Les <b>pertes</b> d'un article dépassent régulièrement
+            votre taux&nbsp;: relevez le taux dans le calcul, ou traitez la cause.</li>
+            <li>Vos <b>charges fixes</b> ont changé — un salaire de plus, un loyer révisé. Tous
+            les planchers bougent en même temps.</li>
+          </ul>
+        </div>
+        <div class="card card-pad">
+          <span class="eyebrow">Ce qui fait perdre de l'argent sans qu'on le voie</span>
+          <h3 style="margin:10px 0 10px">Cinq pièges</h3>
+          <ul style="margin:0;padding-left:18px;font-size:14.5px">
+            <li style="margin-bottom:8px"><b>Répercuter trop tard.</b> Chaque mois d'attente sur
+            une hausse de matière se paie intégralement sur votre résultat.</li>
+            <li style="margin-bottom:8px"><b>Confondre remise et marge.</b> 10&nbsp;% de remise
+            sur 1 000 FCFA, c'est 100 FCFA pris sur 668 de marge&nbsp;: vous perdez 15&nbsp;% de
+            votre marge, pas 10&nbsp;%.</li>
+            <li style="margin-bottom:8px"><b>Les offerts non déclarés.</b> Un café offert qui
+            n'est pas déclaré ne devient pas un geste commercial&nbsp;: il devient un écart de
+            stock inexpliqué, en fin de journée.</li>
+            <li style="margin-bottom:8px"><b>Calculer sur un bon mois.</b> Le prix plancher
+            dépend du volume. Prenez votre volume bas.</li>
+            <li><b>Oublier votre propre salaire.</b> S'il n'est pas dans les charges fixes, il
+            n'est dans aucun prix — et il ne sortira de nulle part.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="note gold">
+        <b>Le lien avec l'application, en une phrase.</b> Tenez le catalogue à jour — prix de
+        vente et seuils — et déclarez vos pertes honnêtement. L'application vous rendra alors
+        le seul chiffre que ce chapitre ne peut pas deviner à votre place&nbsp;: le coût réel,
+        aujourd'hui, de ce que vous vendez.
+      </p>
+
+    </div>
+  </section>
+
+  <!-- ================================================ CHAPITRE 9 -->
+  <section class="chapter" id="ch9">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 09</span>
+      <h2>Le catalogue des écrans</h2>
+      <p class="intro">
+        Les vingt-neuf écrans, avec l'accès qu'ils demandent et ce qu'on y fait. Un écran
+        que vous ne voyez pas n'est pas caché&nbsp;: l'accès correspondant ne vous a pas
+        encore été donné, et il se demande à qui gère l'équipe.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th style="min-width:170px">Écran</th><th style="min-width:180px">Adresse</th>
+              <th style="min-width:190px">Accès demandé</th><th style="min-width:280px">Ce qu'on y fait</th></tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Vente</span></td></tr>
+          <tr><th>Grille de vente</th><td><span class="route">/vente</span></td><td>Enregistrer une vente</td><td>Un appui ajoute une unité, un appui long en retire une.</td></tr>
+          <tr><th>Panier</th><td><span class="route">/vente/panier</span></td><td>Enregistrer une vente</td><td>Ajuster les quantités avant d'encaisser.</td></tr>
+          <tr><th>Encaissement</th><td><span class="route">/vente/encaissement</span></td><td>Enregistrer une vente</td><td>Choisir le moyen de paiement. <b>C'est ici que la vente existe.</b></td></tr>
+          <tr><th>Reçu</th><td><span class="route">/vente/recu</span></td><td>Enregistrer une vente</td><td>Le détail de la vente et sa marge.</td></tr>
+          <tr><th>Historique des ventes</th><td><span class="route">/vente/historique</span></td><td>Enregistrer une vente <span style="color:var(--ink-faint)">ou</span> Voir les ventes de l'équipe</td><td>Vos ventes, ou celles de tout le monde. C'est aussi d'ici qu'on annule.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Stock</span></td></tr>
+          <tr><th>État du stock</th><td><span class="route">/stock</span></td><td>Consulter le stock</td><td>Ce que les mouvements donnent, emplacement par emplacement.</td></tr>
+          <tr><th>Déclarer une perte</th><td><span class="route">/stock/perte</span></td><td>Déclarer une perte</td><td>Sortir une quantité avec son motif, et imputer son coût.</td></tr>
+          <tr><th>Transfert</th><td><span class="route">/stock/transfert</span></td><td>Transférer du stock</td><td>Déplacer entre deux emplacements. Rien ne se perd en route.</td></tr>
+          <tr><th>Inventaire</th><td><span class="route">/stock/inventaire</span></td><td>Compter un emplacement</td><td>Saisie à l'aveugle, puis révélation de l'écart.</td></tr>
+          <tr><th>Écarts</th><td><span class="route">/stock/ecarts</span></td><td>Solder un écart</td><td>Donner un motif à ce qui manque, et refermer la question.</td></tr>
+          <tr><th>Catalogue</th><td><span class="route">/catalogue</span></td><td>Consulter le stock</td><td>Consulter les articles, leurs unités et leurs prix.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Production</span></td></tr>
+          <tr><th>À préparer</th><td><span class="route">/production</span></td><td>Lancer une préparation</td><td>Ce que la vitesse de vente réclame pour la fin de journée.</td></tr>
+          <tr><th>Nouvelle préparation</th><td><span class="route">/production/preparation</span></td><td>Lancer une préparation</td><td>Déclarer un lot ; les ingrédients se consomment tout seuls.</td></tr>
+          <tr><th>Recettes</th><td><span class="route">/production/recettes</span></td><td>Modifier une recette</td><td>Une recette déjà utilisée est gelée : la modifier crée une version.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Approvisionnement</span></td></tr>
+          <tr><th>Liste de courses</th><td><span class="route">/appro</span></td><td>Demander un achat <span style="color:var(--ink-faint)">ou</span> Passer commande</td><td>Calculée depuis les seuils et la vitesse de sortie. On coche en faisant ses courses.</td></tr>
+          <tr><th>Commande</th><td><span class="route">/appro/commande</span></td><td>Passer commande</td><td>Fixer le fournisseur et les prix attendus.</td></tr>
+          <tr><th>Réception</th><td><span class="route">/appro/reception</span></td><td>Réceptionner une livraison</td><td>Saisir ce qui est arrivé. Recalcule le coût moyen et enregistre les frais.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Finance</span></td></tr>
+          <tr><th>Dépenses</th><td><span class="route">/finance</span></td><td>Enregistrer une dépense <span style="color:var(--ink-faint)">ou</span> Voir les marges</td><td>Toutes les sorties, avec leur auteur et leur moyen de paiement.</td></tr>
+          <tr><th>Nouvelle dépense</th><td><span class="route">/finance/depense</span></td><td>Enregistrer une dépense</td><td>Sortir l'argent de la trésorerie et imputer la charge.</td></tr>
+          <tr><th>Trésorerie</th><td><span class="route">/finance/tresorerie</span></td><td>Voir les marges et la trésorerie</td><td>Ce qui entre, ce qui sort, ce qui reste — moyen par moyen.</td></tr>
+          <tr><th>Caisse et clôture</th><td><span class="route">/finance/caisse</span></td><td>Ouvrir et fermer la caisse <span style="color:var(--ink-faint)">ou</span> Clôturer la journée</td><td>Ouvrir le tiroir le matin, dérouler les cinq étapes le soir.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Pilotage</span></td></tr>
+          <tr><th>Tableau de bord</th><td><span class="route">/pilotage</span></td><td>Voir le tableau de bord</td><td>Ventes, marge, trésorerie, écarts — et qui a fait quoi.</td></tr>
+          <tr><th>Équipe</th><td><span class="route">/pilotage/equipe</span></td><td>Gérer l'équipe et les accès</td><td>Accorder et retirer les accès, opération par opération.</td></tr>
+          <tr><th>Catalogue (gestion)</th><td><span class="route">/pilotage/catalogue</span></td><td>Gérer le catalogue</td><td>Articles, prix de vente, seuils de réapprovisionnement.</td></tr>
+          <tr><th>Emplacements</th><td><span class="route">/pilotage/emplacements</span></td><td>Gérer les emplacements</td><td>Comptoir, cuisine, frigo, réserve.</td></tr>
+          <tr><th>Journal</th><td><span class="route">/pilotage/journal</span></td><td>Consulter le journal</td><td>Chaque opération, son auteur, et sous quelle autorisation.</td></tr>
+
+          <tr><td colspan="4" style="background:var(--card-2);padding:6px 14px"><span class="eyebrow">Communs à tous</span></td></tr>
+          <tr><th>Alertes</th><td><span class="route">/alertes</span></td><td>Aucun</td><td>Ce qui demande une action. Chaque alerte propose le geste qui la referme.</td></tr>
+          <tr><th>Mon profil</th><td><span class="route">/moi</span></td><td>Aucun</td><td>Votre poste, vos accès, votre activité, la déconnexion.</td></tr>
+          <tr><th>Connexion</th><td><span class="route">—</span></td><td>Aucun</td><td>Identifiant et mot de passe.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" style="margin-top:18px">
+      <b>Deux opérations n'ont pas encore d'écran.</b> « Approuver une demande » et « Gérer les
+      fournisseurs » peuvent déjà être accordées depuis l'écran Équipe, mais elles n'apparaissent
+      pas dans le tiroir&nbsp;: le tiroir ne propose que ce qui mène quelque part. Elles y
+      entreront le jour où leur écran existera, sans qu'il faille redistribuer quoi que ce soit.
+    </p>
+  </section>
+
+  <!-- =============================================== CHAPITRE 10 -->
+  <section class="chapter" id="ch10">
+    <div class="chapter-head">
+      <span class="chapter-num">CHAPITRE 10</span>
+      <h2>Le vocabulaire</h2>
+      <p class="intro">
+        Douze mots qui reviennent partout. Ils sont écrits ici une fois pour toutes, pour que
+        personne n'ait à deviner.
+      </p>
+    </div>
+
+    <div class="card card-pad">
+      <dl class="gloss">
+        <div><dt>Un fait daté</dt><dd>Ce que vous déclarez&nbsp;: une vente, une perte, une réception. Il porte l'heure, votre nom, votre appareil, et un numéro unique créé avant toute connexion. C'est l'unité de base de tout le système.</dd></div>
+        <div><dt>Le stock projeté</dt><dd>Il n'existe nulle part une case « il reste 9 L de lait ». Le stock se recalcule à chaque affichage, en additionnant tous les mouvements. C'est pourquoi il est toujours juste — et pourquoi le corriger passe forcément par un mouvement.</dd></div>
+        <div><dt>Un mouvement</dt><dd>Une entrée ou une sortie, signée&nbsp;: <span class="mono">+10</span> à la réception, <span class="mono">−3</span> à la vente, <span class="mono">−1</span> en casse. Toujours rattaché à un emplacement et à un fait.</dd></div>
+        <div><dt>Le coût moyen pondéré</dt><dd>Le coût réel d'un article, mis à jour à chaque réception en mélangeant l'ancien stock et le nouveau. C'est lui qui sert à valoriser les pertes et à calculer les marges — pas le dernier prix payé.</dd></div>
+        <div><dt>Le coût figé</dt><dd>À l'instant d'une vente, le coût de revient est enregistré tel qu'il est ce jour-là. Une hausse du lait la semaine suivante ne réécrit pas la marge de la semaine passée.</dd></div>
+        <div><dt>Un écart</dt><dd>La différence entre ce qui devrait être là et ce qui y est. Un écart n'est pas une information, c'est une question ouverte&nbsp;: elle reste comptée tant que personne n'y a répondu.</dd></div>
+        <div><dt>Un motif</dt><dd>La réponse à un écart&nbsp;: casse, périmé, surdosage, invendu, offert, vol, erreur de saisie. Trois d'entre eux coûtent de l'argent, un n'en coûte pas, et le tableau de bord fait la différence.</dd></div>
+        <div><dt>Le tampon</dt><dd>Sur chaque fait&nbsp;: le nom, le poste, l'appareil, l'heure, et <em>sous quelle autorisation</em>. C'est ce dernier point qui permet de trancher une contestation trois semaines plus tard.</dd></div>
+        <div><dt>La journée métier</dt><dd>La journée de la caisse, pas celle du calendrier. Une vente encaissée à 1&nbsp;h du matin appartient à la veille pour celui qui compte le tiroir.</dd></div>
+        <div><dt>Un accord</dt><dd>Le droit de faire une opération, donné par quelqu'un, à une date. Le retirer ne l'efface pas&nbsp;: cela date le retrait. L'historique des délégations existe donc sans que personne ne le tienne.</dd></div>
+        <div><dt>Le filet doré</dt><dd>Le petit trait doré à gauche d'un chiffre. Il signifie « calculé, pas saisi ». Vous n'avez jamais à corriger ce qu'il marque&nbsp;: s'il est faux, c'est qu'un fait manque en amont.</dd></div>
+        <div><dt>Préparé d'avance / à la commande</dt><dd>Un produit préparé d'avance a un stock qui se compte. Un produit assemblé devant le client n'en a jamais&nbsp;: sa disponibilité tient à celle de ses ingrédients. Compter un stock de café glacé n'aurait aucun sens.</dd></div>
+      </dl>
+    </div>
+
+    <div class="closer">
+      <span class="eyebrow">Pour finir</span>
+      <p style="margin-top:14px">
+        « Déclarez ce qui s'est passé, honnêtement et tout de suite. Le reste du travail,
+        l'application le fait. »
+      </p>
+      <p style="font-family:var(--font-sans);font-style:normal;font-size:14.5px;color:var(--ink-soft);max-width:40em;margin-top:16px">
+        Un chiffre du soir qui tombe juste ne récompense pas la personne la plus rigoureuse&nbsp;:
+        il récompense l'équipe qui déclare tout, y compris ce qui l'arrange le moins. Un écart
+        expliqué coûte moins cher qu'un écart caché — et beaucoup moins de temps.
+      </p>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+</body>
+</html>

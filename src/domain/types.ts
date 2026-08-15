@@ -184,6 +184,8 @@ export const EVENT_TYPES = [
   'EXPENSE_RECORDED',
   'CASH_SESSION_OPENED',
   'CASH_SESSION_CLOSED',
+  'CAPABILITY_GRANTED',
+  'CAPABILITY_REVOKED',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

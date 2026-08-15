@@ -58,6 +58,11 @@ const REQUIRED: Record<string, string[]> = {
     'p_event_id', 'p_variance_id', 'p_site_id', 'p_source', 'p_reference_id', 'p_subject',
     'p_theoretical', 'p_declared', 'p_delta', 'p_amount', 'p_resolution',
   ],
+  // Signature relevée en base le 15 août 2026 : ni `p_event_id` ni les autres
+  // colonnes de traçabilité — l'idempotence de ces deux fonctions tient à leur
+  // propre logique (accorder un droit déjà actif rend l'accord existant).
+  grant_capability: ['p_user_id', 'p_capability'],
+  revoke_capability: ['p_user_id', 'p_capability'],
 };
 
 /** Paramètres à valeur par défaut : facultatifs, mais pas inventables. */
@@ -76,6 +81,8 @@ const OPTIONAL: Record<string, string[]> = {
   open_cash_session: ['p_created_at_local', 'p_device_id'],
   close_cash_session: ['p_reason', 'p_variance_id', 'p_created_at_local', 'p_device_id'],
   resolve_variance: ['p_note', 'p_detected_at', 'p_created_at_local', 'p_device_id'],
+  grant_capability: [],
+  revoke_capability: [],
 };
 
 /** La fonction appelée pour chaque type d'événement (voir `RPC_BY_EVENT`). */
@@ -91,6 +98,8 @@ const RPC: Partial<Record<EventType, string>> = {
   CASH_SESSION_OPENED: 'open_cash_session',
   CASH_SESSION_CLOSED: 'close_cash_session',
   STOCK_VARIANCE_DETECTED: 'resolve_variance',
+  CAPABILITY_GRANTED: 'grant_capability',
+  CAPABILITY_REVOKED: 'revoke_capability',
 };
 
 const ID = '00000000-0000-0000-0000-0000000000aa';
@@ -133,6 +142,8 @@ const PAYLOADS: Partial<Record<EventType, Record<string, unknown>>> = {
     theoretical: 0, declared: 3000, delta: 3000, amount: 3000,
     detectedAt: '2026-08-15T09:00:00.000Z', resolution: 'REMBOURSE', note: undefined,
   },
+  CAPABILITY_GRANTED: { userId: ID, capability: 'RECORD_WASTE' },
+  CAPABILITY_REVOKED: { userId: ID, capability: 'RECORD_WASTE' },
 };
 
 function eventOf(eventType: EventType): DomainEvent {
@@ -156,8 +167,8 @@ function eventOf(eventType: EventType): DomainEvent {
 describe('arguments RPC', () => {
   const types = Object.keys(RPC) as EventType[];
 
-  it('couvre onze des quinze types d\'événements', () => {
-    expect(types).toHaveLength(11);
+  it('couvre treize des dix-sept types d\'événements', () => {
+    expect(types).toHaveLength(13);
   });
 
   it.each(types)('%s : aucun argument inconnu de la fonction', (eventType) => {

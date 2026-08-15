@@ -36,6 +36,8 @@ const RPC_BY_EVENT: Partial<Record<DomainEvent['eventType'], string>> = {
    * empruntée). On ne renomme pas ce vocabulaire déjà en place ; on le câble.
    */
   STOCK_VARIANCE_DETECTED: 'resolve_variance',
+  CAPABILITY_GRANTED: 'grant_capability',
+  CAPABILITY_REVOKED: 'revoke_capability',
 };
 
 /*
@@ -371,6 +373,16 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         p_created_at_local: event.createdAtLocal,
         p_device_id: event.deviceId,
       };
+
+    /*
+     * `grant_capability`/`revoke_capability` n'ont pas de `p_event_id` : leur
+     * idempotence tient à leur propre logique (accorder un droit déjà actif
+     * renvoie l'accord existant plutôt que d'en ouvrir un second), pas au
+     * rejeu de l'identifiant client comme les autres transactions.
+     */
+    case 'CAPABILITY_GRANTED':
+    case 'CAPABILITY_REVOKED':
+      return { p_user_id: payload.userId, p_capability: payload.capability };
 
     default:
       return {};

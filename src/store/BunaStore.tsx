@@ -171,6 +171,14 @@ export function reducer(state: State, action: Action): State {
         // veut souvent dire « pas le droit », pas « rien ne s'est passé ».
         audit: s.audit.length ? s.audit : state.audit,
         events,
+        /*
+         * Les accords sont maintenant une projection du serveur, au même titre
+         * que le stock (§0.2) : `user_capabilities` fait foi, `SEED_GRANTS` ne
+         * sert plus qu'avant la première hydratation. RLS limite qui voit quoi
+         * (soi-même, ou tout le monde avec MANAGE_TEAM) — jamais un tableau
+         * vide par accident, donc pas besoin du garde-fou de `audit` ci-dessus.
+         */
+        grants: s.grants,
         saleCounter: s.saleCounter,
         batchCounter: Math.max(state.batchCounter, s.batches.length),
       };
@@ -1345,19 +1353,23 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       if (!fresh.length) return false;
 
       const target = USERS.find((u) => u.id === userId);
-      dispatch({
-        type: 'GRANT',
-        grants: fresh.map((capability) => ({
-          id: uuid(),
-          userId,
-          capability,
-          grantedBy: actor.userId,
-          grantedByName: actor.userName,
-          grantedAt: actor.at,
-        })),
-      });
+      const grants = fresh.map((capability) => ({
+        id: uuid(),
+        userId,
+        capability,
+        grantedBy: actor.userId,
+        grantedByName: actor.userName,
+        grantedAt: actor.at,
+      }));
+      dispatch({ type: 'GRANT', grants });
       dispatch({
         type: 'COMMIT',
+        // Un accord par capacité : `grant_capability` n'en prend qu'une à la
+        // fois côté serveur (§0.2 — sans ceci, l'accord ne vit qu'en mémoire
+        // et disparaît au premier rechargement).
+        events: grants.map((g) => makeEvent('CAPABILITY_GRANTED', 'CapabilityGrant', g.id, {
+          userId, capability: g.capability,
+        })),
         audit: [makeAudit(
           actor,
           `Accès accordés — ${target?.name ?? 'membre'}`,
@@ -1367,7 +1379,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       });
       return true;
     },
-    [state.grants, authorize, makeAudit],
+    [state.grants, authorize, makeAudit, makeEvent],
   );
 
   const revokeCapabilities = useCallback<Ctx['revokeCapabilities']>(
@@ -1387,6 +1399,9 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'REVOKE', userId, capabilities: guarded, by: actor });
       dispatch({
         type: 'COMMIT',
+        events: guarded.map((capability) => makeEvent('CAPABILITY_REVOKED', 'CapabilityGrant', uuid(), {
+          userId, capability,
+        })),
         audit: [makeAudit(
           actor,
           `Accès retirés — ${target?.name ?? 'membre'}`,
@@ -1396,7 +1411,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       });
       return true;
     },
-    [authorize, makeAudit],
+    [authorize, makeAudit, makeEvent],
   );
 
   /* --------------------------------------------------- Recouvrement */

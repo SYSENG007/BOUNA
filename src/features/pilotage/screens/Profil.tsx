@@ -181,6 +181,38 @@ export function Profil() {
           </Card>
         )}
 
+        {/*
+          Le manuel de l'équipe.
+
+          Il vit dans `public/manuel.html` et non dans un écran React : c'est un
+          document, pas une vue de l'application, et il n'a rien à lire dans le
+          store. Servi comme un fichier statique, il est précaché par le service
+          worker au même titre que le reste — donc consultable sur le terrain,
+          sans réseau, ce qui est exactement le moment où on en a besoin.
+
+          Lien classique, même onglet : en PWA plein écran, `target="_blank"`
+          ouvrirait le navigateur système et sortirait la personne de l'app.
+          L'état local survit au rechargement, le retour est donc sans risque.
+        */}
+        <Card className="space-y-3">
+          <SectionLabel>Aide</SectionLabel>
+          <p className="text-[13.5px] leading-relaxed text-ink-600">
+            Comment l'application fonctionne, ce que vous déclarez, ce qu'elle en déduit —
+            et le parcours de chaque poste.
+          </p>
+          {/* Reprend trait pour trait le registre `secondary` de `Button` : c'est
+              une destination, donc une ancre — mais rien ne doit le trahir à l'œil. */}
+          <a
+            href="/manuel.html"
+            className="no-select inline-flex min-h-[44px] w-full items-center justify-center gap-2
+              rounded-[6px] border border-ink-200 bg-surface px-5 text-[15px] font-medium text-cafe
+              transition-[background-color,border-color,transform] duration-100 ease-out
+              hover:border-ink-300 hover:bg-[#FDFBF7] active:translate-y-px active:bg-sable-pale"
+          >
+            Ouvrir le manuel de l'équipe
+          </a>
+        </Card>
+
         <Button full onClick={logout}>Déconnexion</Button>
       </main>
     </div>

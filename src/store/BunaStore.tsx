@@ -16,8 +16,19 @@ import type { Actor } from '../domain/actor';
 import { makeActor } from '../domain/actor';
 import type { Resolution, Variance } from '../domain/variance';
 import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL, resolve as resolveVarianceFact } from '../domain/variance';
-import { convert } from '../domain/units';
-import { projectStock, sourceLocation, weightedAverageCost } from '../domain/stock';
+import { convert, canConvert } from '../domain/units';
+import { projectStock, sourceLocation, unitMismatches, weightedAverageCost } from '../domain/stock';
+
+/**
+ * Vrai si l'article a une unité connue, de la même famille que la ligne.
+ *
+ * Sans ce garde-fou, une recette exprimée en mL pour un article repassé en
+ * kilos faisait lever `convert()` en plein rendu — donc bien au-dessus des
+ * limites d'écran, là où plus aucune reprise n'est possible.
+ */
+function convertible(from: Unit, to: Unit | undefined): to is Unit {
+  return to !== undefined && canConvert(from, to);
+}
 import { dueEvents, pendingEvents, selectTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
 import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
@@ -547,6 +558,20 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   }, [state.items, referentials]);
 
   const stock = useMemo(() => projectStock(state.movements, itemsMap), [state.movements, itemsMap]);
+
+  /*
+   * Ce que la projection a dû écarter.
+   *
+   * Un mouvement écrit en kg sur un article repassé en unités ne peut pas être
+   * replié : il est ignoré pour que le comptoir continue de tourner, mais le
+   * stock affiché de cet article est alors incomplet. On ne le laisse pas
+   * passer pour un zéro — le journal garde de quoi corriger l'unité à froid.
+   */
+  const mismatches = useMemo(() => unitMismatches(state.movements, itemsMap), [state.movements, itemsMap]);
+  useEffect(() => {
+    if (!mismatches.length) return;
+    console.warn('[BUNA] stock incomplet — unités incompatibles', mismatches);
+  }, [mismatches]);
   const user = useMemo(() => {
     const base = remoteProfile ?? USERS.find((u) => u.id === state.currentUserId) ?? null;
     if (!base) return null;
@@ -819,7 +844,13 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           ing.itemId,
           sourceFor(
             ing.itemId,
-            convert(ing.quantity * produced, ing.unit, itemsMap.get(ing.itemId)?.unit ?? ing.unit),
+            /* Faute d'unité comparable, on interroge le stock dans l'unité du
+               mouvement : l'emplacement choisi peut être imparfait, mais une
+               conversion impossible ne doit pas faire échouer une production
+               déjà faite en cuisine. */
+            convertible(ing.unit, itemsMap.get(ing.itemId)?.unit)
+              ? convert(ing.quantity * produced, ing.unit, itemsMap.get(ing.itemId)!.unit)
+              : ing.quantity * produced,
             LOC.KITCHEN,
           ),
           -(ing.quantity * produced), ing.unit,

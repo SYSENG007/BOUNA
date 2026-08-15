@@ -1,5 +1,5 @@
-import type { Item, StockMovement, UUID } from './types';
-import { convert } from './units';
+import type { Item, StockMovement, Unit, UUID } from './types';
+import { canConvert, convert } from './units';
 
 /**
  * RULE-002 : aucun stock ne peut être modifié directement.
@@ -11,11 +11,71 @@ import { convert } from './units';
 
 export interface StockKey { itemId: UUID; locationId: UUID }
 
+/**
+ * Ce qu'un mouvement ajoute au stock de son article, ou rien.
+ *
+ * `convert()` refuse — à raison — de traduire des kg en unités : le facteur
+ * n'existe pas, et l'inventer donnerait un stock faux sans le dire. Mais ce
+ * refus levé au milieu du repli remontait jusqu'à `BunaProvider`, au-dessus de
+ * toutes les limites d'écran : un seul mouvement dont l'unité ne correspondait
+ * plus à celle de son article éteignait l'application entière — comptoir
+ * compris — et le rechargement la rallumait sur le même état enregistré.
+ *
+ * Le cas n'a rien d'exotique : il suffit qu'on change l'unité d'un article déjà
+ * mouvementé, ou qu'une ligne serveur arrive avec une unité inconnue que le
+ * mappeur replie sur « unité ».
+ *
+ * Un article dont on ne sait plus lire le stock est un article à signaler, pas
+ * une caisse à fermer. On écarte donc le mouvement au lieu de l'inventer, et
+ * `unitMismatches()` dit lesquels ont été écartés — pour que ce silence ne
+ * passe pas pour un zéro.
+ */
+function contribution(m: StockMovement, item: Item): number {
+  return canConvert(m.unit, item.unit) ? convert(m.quantity, m.unit, item.unit) : 0;
+}
+
+/** Un mouvement que le repli n'a pas pu compter, et de quoi le réparer. */
+export interface UnitMismatch {
+  movementId: UUID;
+  itemId: UUID;
+  itemName: string;
+  /** L'unité dans laquelle le mouvement a été écrit. */
+  movementUnit: Unit;
+  /** Celle que porte l'article aujourd'hui. */
+  itemUnit: Unit;
+}
+
+/**
+ * Les mouvements écartés par la projection.
+ *
+ * Sert au diagnostic et à l'alerte : tant qu'un article figure ici, son stock
+ * affiché est incomplet, et c'est l'unité de l'article ou celle du mouvement
+ * qu'il faut corriger — pas le stock, qui ne se saisit pas (RULE-002).
+ */
+export function unitMismatches(
+  movements: StockMovement[],
+  items: Map<UUID, Item>,
+): UnitMismatch[] {
+  const out: UnitMismatch[] = [];
+  for (const m of movements) {
+    const item = items.get(m.itemId);
+    if (!item || canConvert(m.unit, item.unit)) continue;
+    out.push({
+      movementId: m.id,
+      itemId: item.id,
+      itemName: item.name,
+      movementUnit: m.unit,
+      itemUnit: item.unit,
+    });
+  }
+  return out;
+}
+
 /** Stock d'un article sur un emplacement, exprimé dans l'unité de l'article. */
 export function stockAt(movements: StockMovement[], itemId: UUID, locationId: UUID, item: Item): number {
   return movements.reduce((total, m) => {
     if (m.itemId !== itemId || m.locationId !== locationId) return total;
-    return total + convert(m.quantity, m.unit, item.unit);
+    return total + contribution(m, item);
   }, 0);
 }
 
@@ -23,7 +83,7 @@ export function stockAt(movements: StockMovement[], itemId: UUID, locationId: UU
 export function stockTotal(movements: StockMovement[], itemId: UUID, item: Item): number {
   return movements.reduce((total, m) => {
     if (m.itemId !== itemId) return total;
-    return total + convert(m.quantity, m.unit, item.unit);
+    return total + contribution(m, item);
   }, 0);
 }
 
@@ -34,7 +94,7 @@ export function projectStock(movements: StockMovement[], items: Map<UUID, Item>)
     const item = items.get(m.itemId);
     if (!item) continue;
     const key = `${m.itemId}@${m.locationId}`;
-    out.set(key, (out.get(key) ?? 0) + convert(m.quantity, m.unit, item.unit));
+    out.set(key, (out.get(key) ?? 0) + contribution(m, item));
   }
   return out;
 }

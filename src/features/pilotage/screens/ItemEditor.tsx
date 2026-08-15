@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useBuna } from '../../../store/BunaStore';
 import { uuid } from '../../../domain/ids';
 import { fileToThumbnail, isImage } from '../../../domain/image';
 import { fcfaFull } from '../../../domain/money';
+import { canConvert } from '../../../domain/units';
 import { UNIT_LABEL, type Item, type ItemKind, type Unit } from '../../../domain/types';
 import { ScreenHeader } from '../../../design-system/components/patterns';
 import { ProductImage } from '../../../design-system/components/ProductImage';
@@ -23,7 +24,7 @@ const UNITS: Unit[] = ['unite', 'L', 'mL', 'kg', 'g', 'bouteille', 'sachet', 'pa
 
 /** Création et modification d'un article. Une seule action pleine : « Enregistrer ». */
 export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => void }) {
-  const { saveItem, archiveItem } = useBuna();
+  const { state, saveItem, archiveItem } = useBuna();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [draft, setDraft] = useState<Item>(
@@ -38,6 +39,37 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
   const patch = (next: Partial<Item>) => setDraft((d) => ({ ...d, ...next }));
   const isFinished = draft.kind === 'FINISHED' || draft.kind === 'INTERMEDIATE';
   const nameMissing = draft.name.trim().length === 0;
+
+  /*
+   * Changer l'unité d'un article déjà mouvementé rendait son stock illisible.
+   *
+   * Les mouvements gardent l'unité dans laquelle ils ont été écrits — c'est le
+   * fait, il ne se réécrit pas. Passer le cacao de kilos à unités laissait donc
+   * des réceptions en kg face à un article en unités, deux familles qu'aucun
+   * facteur ne relie : la projection les écarte, et le stock affiché devient
+   * faux sans que personne l'ait demandé.
+   *
+   * On ne propose donc plus que les unités de la même famille dès qu'un
+   * mouvement existe. Le prix, le coût et les seuils restent modifiables : ce
+   * sont eux qu'on vient changer.
+   */
+  const movedUnits = useMemo(() => {
+    if (!item) return [];
+    const seen = new Set<Unit>();
+    for (const m of state.movements) if (m.itemId === item.id) seen.add(m.unit);
+    return [...seen];
+  }, [item, state.movements]);
+
+  const unitLocked = movedUnits.length > 0;
+  /*
+   * L'unité portée aujourd'hui reste toujours proposée, même si elle est déjà
+   * incompatible avec les mouvements : un article abîmé par l'ancienne version
+   * doit s'afficher tel qu'il est — sinon la liste montrerait une unité que
+   * l'article n'a pas — et rester réparable vers la bonne famille.
+   */
+  const unitOptions = unitLocked
+    ? UNITS.filter((u) => u === draft.unit || movedUnits.every((moved) => canConvert(moved, u)))
+    : UNITS;
 
   const pickImage = async (file: File | undefined) => {
     if (!file) return;
@@ -120,8 +152,12 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
           label="Unité"
           value={draft.unit}
           onChange={(v) => patch({ unit: v as Unit })}
-          options={UNITS.map((u) => ({ value: u, label: UNIT_LABEL[u] }))}
-          hint="L'unité dans laquelle vous comptez cet article au quotidien."
+          options={unitOptions.map((u) => ({ value: u, label: UNIT_LABEL[u] }))}
+          hint={
+            unitLocked
+              ? `Cet article a déjà des mouvements de stock comptés en ${movedUnits.map((u) => UNIT_LABEL[u]).join(', ')}. Vous pouvez encore affiner l'unité dans la même famille — pour en changer vraiment, créez un nouvel article.`
+              : "L'unité dans laquelle vous comptez cet article au quotidien."
+          }
         />
 
         {isFinished && (

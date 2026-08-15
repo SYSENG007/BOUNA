@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  projectStock, replenishmentNeed, stockAt, stockHealth, stockTotal, weightedAverageCost,
+  projectStock, replenishmentNeed, stockAt, stockHealth, stockTotal, unitMismatches,
+  weightedAverageCost,
 } from '../stock';
 import { convert } from '../units';
 import type { Item, StockMovement } from '../types';
@@ -54,6 +55,47 @@ describe('RULE-002 — le stock est une projection des mouvements', () => {
     const items = new Map([['it-lait', milk]]);
     const projected = projectStock([mv({ quantity: 5 }), mv({ quantity: 2 })], items);
     expect(projected.get('it-lait@loc-a')).toBe(7);
+  });
+});
+
+/**
+ * Le repli du stock tourne dans `BunaProvider`, au-dessus de toutes les limites
+ * d'écran. Une exception levée là éteint l'application entière — comptoir
+ * compris — et le rechargement la rallume sur le même état enregistré. Un
+ * mouvement dont l'unité ne se convertit plus doit donc être écarté et
+ * signalé, jamais jeté à la figure du rendu.
+ */
+describe('RULE-002 — la projection ne peut pas arrêter l\'application', () => {
+  /* Le cas réel : un article compté en litres qu'on repasse en unités. */
+  const perUnit: Item = { ...milk, unit: 'unite' };
+  const mixed = [
+    mv({ quantity: 20, unit: 'L', movementType: 'PURCHASE_RECEIPT' }),
+    mv({ quantity: 3, unit: 'unite', movementType: 'PURCHASE_RECEIPT' }),
+  ];
+
+  it('écarte le mouvement inconvertible au lieu de lever', () => {
+    expect(() => stockAt(mixed, 'it-lait', 'loc-a', perUnit)).not.toThrow();
+    expect(stockAt(mixed, 'it-lait', 'loc-a', perUnit)).toBe(3);
+  });
+
+  it('ne lève pas non plus sur le total ni sur la projection complète', () => {
+    const items = new Map([['it-lait', perUnit]]);
+    expect(() => stockTotal(mixed, 'it-lait', perUnit)).not.toThrow();
+    expect(() => projectStock(mixed, items)).not.toThrow();
+    expect(projectStock(mixed, items).get('it-lait@loc-a')).toBe(3);
+  });
+
+  it('nomme ce qui a été écarté, pour que le stock incomplet ne passe pas pour un zéro', () => {
+    const items = new Map([['it-lait', perUnit]]);
+    const gaps = unitMismatches(mixed, items);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toMatchObject({ itemId: 'it-lait', movementUnit: 'L', itemUnit: 'unite' });
+  });
+
+  it('ne signale rien quand toutes les unités sont de la même famille', () => {
+    const items = new Map([['it-lait', milk]]);
+    expect(unitMismatches([mv({ quantity: 20, unit: 'L' }), mv({ quantity: -150, unit: 'mL' })], items))
+      .toHaveLength(0);
   });
 });
 

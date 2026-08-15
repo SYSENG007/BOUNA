@@ -1,5 +1,5 @@
 import type { Item, Unit, UUID } from './types';
-import { convert } from './units';
+import { canConvert, convert } from './units';
 
 /**
  * Ce que les matières permettent encore de produire.
@@ -42,7 +42,10 @@ export function feasibleUnits(
 
   for (const ing of ingredients) {
     const item = itemOf(ing.itemId);
-    if (!item) continue;
+    /* Une unité qu'on ne sait pas traduire n'est pas une contrainte qu'on peut
+       évaluer : on l'ignore comme un ingrédient inconnu, plutôt que d'arrêter
+       l'écran de préparation sur une exception. */
+    if (!item || !canConvert(ing.unit, item.unit)) continue;
     seen += 1;
     const perUnit = convert(ing.quantity, ing.unit, item.unit);
     if (perUnit <= 0) continue;
@@ -85,7 +88,7 @@ export function shortfallFor(
   const out: Shortfall[] = [];
   for (const ing of ingredients) {
     const item = itemOf(ing.itemId);
-    if (!item) continue;
+    if (!item || !canConvert(ing.unit, item.unit)) continue;
     const needed = convert(ing.quantity, ing.unit, item.unit) * quantity;
     const missing = needed - availableOf(ing.itemId);
     if (missing > 0.0001) {

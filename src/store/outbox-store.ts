@@ -21,9 +21,26 @@ import type { DomainEvent } from '../domain/types';
  * ne doit jamais attendre un disque (RULE-010).
  */
 
-const DB_NAME = 'buna';
+const DB_NAME = 'buna-v2';
 const DB_VERSION = 1;
 const STORE = 'outbox';
+
+/**
+ * Remise à zéro du parc, côté file d'attente.
+ *
+ * Le nom change, pas la version : `onupgradeneeded` ne crée le magasin que
+ * s'il manque, donc un simple `DB_VERSION + 1` garderait tous les événements.
+ * Il faut une autre base pour repartir vide.
+ *
+ * La suppression de l'ancienne base détruit ce qui n'était pas encore parti.
+ * C'est voulu et ponctuel : au passage en production, une vente de test en
+ * attente ne doit surtout pas s'écrire dans la base propre.
+ */
+const LEGACY_DB_NAMES = ['buna'];
+
+if (typeof indexedDB !== 'undefined') {
+  for (const name of LEGACY_DB_NAMES) indexedDB.deleteDatabase(name);
+}
 
 /** Statuts qui appellent encore un envoi — un événement SYNCED n'a plus à être gardé. */
 const PENDING_STATUSES = new Set(['LOCAL_ONLY', 'QUEUED', 'SYNCING', 'FAILED']);

@@ -54,7 +54,14 @@ export async function loadProfile(): Promise<User | null> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, organization_id, site_id, name, post, status, user_capabilities(capability, revoked_at)')
+    /*
+     * `user_capabilities` porte trois clés étrangères vers `profiles`
+     * (user_id, granted_by, revoked_by). Sans préciser laquelle joindre,
+     * PostgREST refuse la requête entière (ambiguïté d'imbrication) — et
+     * `loadProfile()` traite ce refus comme « profil absent ». D'où le
+     * message trompeur au premier vrai essai de connexion.
+     */
+    .select('id, organization_id, site_id, name, post, status, user_capabilities!user_id(capability, revoked_at)')
     .eq('id', userId)
     .single();
 

@@ -352,7 +352,16 @@ interface Ctx {
   }) => void;
   recordWaste: (input: { itemId: UUID; locationId: UUID; quantity: number; reason: WasteReason }) => void;
   transferStock: (input: { itemId: UUID; from: UUID; to: UUID; quantity: number }) => void;
-  recordExpense: (input: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'actor'>) => void;
+  /**
+   * `debt` n'existe que si la dépense dépasse la caisse disponible et que la
+   * personne a désigné un prêteur : elle ouvre alors un écart de source
+   * `DEBT`, qui reste affiché sur le tableau de bord jusqu'à être marqué
+   * remboursé depuis Écarts — exactement comme un écart de caisse ou de stock.
+   */
+  recordExpense: (
+    input: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'actor'>,
+    debt?: { lender: string; amount: number },
+  ) => void;
   /** Crée ou met à jour un article du catalogue. */
   saveItem: (item: Item) => void;
   saveLocation: (location: StockLocation) => void;
@@ -919,15 +928,55 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   );
 
   const recordExpense = useCallback<Ctx['recordExpense']>(
-    (input) => {
+    (input, debt) => {
       const actor = authorize('RECORD_EXPENSE');
       if (!actor) return;
       const id = uuid();
+
+      /*
+       * Un emprunt pour couvrir une dépense n'est pas la dépense elle-même —
+       * c'est une dette distincte, qui doit rester visible jusqu'à son
+       * remboursement. On la modélise comme un écart (`Variance`), le seul
+       * concept du domaine déjà bâti pour « ouvert jusqu'à ce que quelqu'un
+       * tranche » : même tableau de bord, même écran de recouvrement, même
+       * discipline d'auteur et de motif que les écarts de caisse ou de stock.
+       */
+      const varianceId = debt ? uuid() : undefined;
+      const variance = debt && varianceId
+        ? {
+            id: varianceId,
+            source: 'DEBT' as const,
+            reference: id,
+            subject: `Emprunt — ${debt.lender}`,
+            theoretical: 0,
+            declared: debt.amount,
+            delta: debt.amount,
+            amount: debt.amount,
+            actor,
+            resolution: null,
+            resolver: null,
+            createdAt: actor.at,
+          }
+        : undefined;
+
       dispatch({
         type: 'COMMIT',
         expense: { ...input, id, userId: actor.userId, createdAt: actor.at, actor },
-        events: [makeEvent('EXPENSE_RECORDED', 'Expense', id, { ...input, expenseId: id })],
-        audit: [makeAudit(actor, `Dépense — ${input.description}`, `${input.amount} FCFA · ${input.category}`)],
+        events: [makeEvent('EXPENSE_RECORDED', 'Expense', id, {
+          ...input, expenseId: id,
+          ...(variance && { varianceId: variance.id, varianceAmount: variance.amount, varianceSubject: variance.subject }),
+        })],
+        audit: [
+          makeAudit(actor, `Dépense — ${input.description}`, `${input.amount} FCFA · ${input.category}`),
+          ...(debt
+            ? [makeAudit(
+                actor,
+                `Emprunt — ${debt.lender}`,
+                `${debt.amount} FCFA pour couvrir une dépense · reste dû jusqu'au remboursement`,
+              )]
+            : []),
+        ],
+        variances: variance ? [variance] : undefined,
       });
     },
     [authorize, makeEvent, makeAudit],
@@ -1361,8 +1410,18 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'RESOLVE_VARIANCE', varianceId, resolution, note, by: actor });
       dispatch({
         type: 'COMMIT',
+        /*
+         * `resolve_variance` côté serveur peut insérer l'écart lui-même s'il
+         * n'existait pas encore là-bas (idempotent, `on conflict do nothing`) —
+         * d'où un payload complet et pas seulement la résolution : c'est le
+         * filet qui rattrape un écart détecté hors ligne et jamais autrement
+         * synchronisé.
+         */
         events: [makeEvent('STOCK_VARIANCE_DETECTED', 'Variance', varianceId, {
-          source: target.source, delta: target.delta, amount: target.amount, resolution, note,
+          siteId, source: target.source, referenceId: target.reference, subject: target.subject,
+          theoretical: target.theoretical, declared: target.declared,
+          delta: target.delta, amount: target.amount,
+          detectedAt: target.createdAt, resolution, note,
         })],
         audit: [makeAudit(
           actor,
@@ -1372,7 +1431,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       });
       return true;
     },
-    [state.variances, authorize, makeEvent, makeAudit],
+    [state.variances, siteId, authorize, makeEvent, makeAudit],
   );
 
   /* ------------------------------------------------------- Alertes */

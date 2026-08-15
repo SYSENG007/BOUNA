@@ -180,13 +180,20 @@ function ProductGrid({
            invendable en permanence. Sa disponibilité tient aux ingrédients. */
         const toOrder = isMadeToOrder(p);
         const out = !toOrder && available <= 0;
+        /* Le plafond s'applique à CHAQUE ajout, pas seulement au premier :
+           `out` ne protégeait que l'appui initial — rien n'empêchait ensuite
+           le bouton « + » du stepper de dépasser indéfiniment le disponible.
+           Aucun produit du catalogue actuel n'est en BATCH (tous sont « à la
+           commande »), donc ce plafond est dormant aujourd'hui — mais il
+           redevient actif dès qu'un produit fini stocké réapparaît. */
+        const atCeiling = !toOrder && qty >= available;
         return (
           <div
             key={p.id}
             role="button"
             tabIndex={out ? -1 : 0}
             aria-disabled={out}
-            onClick={() => !out && onAdd(p.id)}
+            onClick={() => !out && !atCeiling && onAdd(p.id)}
             className={clsx(
               'no-select relative flex min-h-[128px] flex-col justify-between rounded-[8px] border p-3 text-left transition-all duration-200',
               out
@@ -221,8 +228,9 @@ function ProductGrid({
                   </button>
                   <span className="num min-w-[16px] text-center text-[15px] font-medium text-cafe">{qty}</span>
                   <button
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-cafe text-sable-pale active:bg-cafe-soft transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-cafe text-sable-pale transition-colors active:bg-cafe-soft disabled:opacity-40"
                     onClick={() => onAdd(p.id)}
+                    disabled={atCeiling}
                   >
                     <span className="text-lg leading-none mb-[2px]">+</span>
                   </button>

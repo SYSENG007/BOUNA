@@ -3,17 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useBuna, LOCATIONS, LOC } from '../../../store/BunaStore';
 import { UNIT_LABEL, WASTE_LABEL, type WasteReason } from '../../../domain/types';
+import { formatQty } from '../../../domain/units';
 import { fcfaFull } from '../../../domain/money';
 import { ScreenHeader } from '../../../design-system/components/patterns';
 import {
-  Button, NumberStepper, SectionLabel, SelectField,
+  Button, Card, NumberStepper, SectionLabel, SelectField,
 } from '../../../design-system/components/primitives';
 
 const REASONS: WasteReason[] = ['CASSE', 'PERIME', 'SURDOSAGE', 'BATCH_RATE', 'INVENDU', 'INCONNU'];
 
 /** Déclarer une perte — RULE-008 : toute correction sensible possède un motif. */
 export function Waste() {
-  const { state, items, recordWaste } = useBuna();
+  const { state, items, recordWaste, stockOf } = useBuna();
   const navigate = useNavigate();
 
   const [itemId, setItemId] = useState(state.items[0]?.id ?? '');
@@ -23,6 +24,17 @@ export function Waste() {
 
   const item = items.get(itemId);
   const cost = quantity * (item?.weightedAvgCost ?? 0);
+  const available = itemId ? stockOf(itemId, locationId) : 0;
+  const locationName = LOCATIONS.find((l) => l.id === locationId)?.name ?? locationId;
+  /*
+   * On ne bloque pas : la perte est un fait qui s'est déjà produit dans le
+   * monde réel, indépendamment de ce que le système croit avoir en stock —
+   * même logique que la déclaration de production. Mais la personne doit
+   * voir la conséquence avant de valider, sinon le stock devient une
+   * fiction que personne ne rattrape (c'est exactement ce test qui vient
+   * de le révéler : une perte déclarée sur un article déjà à zéro).
+   */
+  const exceedsStock = quantity > available;
 
   const submit = () => {
     if (!reason || !item) return;
@@ -49,9 +61,28 @@ export function Waste() {
         />
 
         <div>
-          <span className="mb-1.5 block text-[13px] font-medium text-ink-700">Quantité perdue</span>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-[13px] font-medium text-ink-700">Quantité perdue</span>
+            {item && (
+              <span className="num text-[12px] text-ink-500">
+                {formatQty(available, item.unit)} en stock à {locationName}
+              </span>
+            )}
+          </div>
           <NumberStepper value={quantity} onChange={setQuantity} unit={item ? UNIT_LABEL[item.unit] : 'unités'} min={1} />
         </div>
+
+        {exceedsStock && item && (
+          <Card className="space-y-1.5 border border-surveiller bg-surveiller-pale">
+            <p className="text-[13.5px] font-medium text-or-ink">
+              {locationName} n'a que {formatQty(available, item.unit)} en stock.
+            </p>
+            <p className="text-[12px] leading-relaxed text-or-ink">
+              Vous pouvez enregistrer quand même si la perte est bien réelle — le stock passera en
+              négatif et l'écart devra être expliqué.
+            </p>
+          </Card>
+        )}
 
         <div>
           <SectionLabel className="mb-2">Motif — obligatoire</SectionLabel>

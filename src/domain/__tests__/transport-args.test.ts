@@ -54,6 +54,10 @@ const REQUIRED: Record<string, string[]> = {
     'p_event_id', 'p_cash_session_id', 'p_site_id', 'p_shift_number', 'p_opening_cash',
     'p_expected', 'p_counted_cash', 'p_variance',
   ],
+  resolve_variance: [
+    'p_event_id', 'p_variance_id', 'p_site_id', 'p_source', 'p_reference_id', 'p_subject',
+    'p_theoretical', 'p_declared', 'p_delta', 'p_amount', 'p_resolution',
+  ],
 };
 
 /** Paramètres à valeur par défaut : facultatifs, mais pas inventables. */
@@ -65,9 +69,13 @@ const OPTIONAL: Record<string, string[]> = {
   transfer_stock: ['p_created_at_local', 'p_device_id'],
   apply_inventory_count: ['p_variance_id', 'p_variance_amount', 'p_created_at_local', 'p_device_id'],
   complete_batch: ['p_consumption', 'p_variance_id', 'p_variance_amount', 'p_created_at_local', 'p_device_id'],
-  record_expense: ['p_supplier_id', 'p_payment_method', 'p_created_at_local', 'p_device_id'],
+  record_expense: [
+    'p_supplier_id', 'p_payment_method', 'p_created_at_local', 'p_device_id',
+    'p_variance_id', 'p_variance_amount', 'p_variance_subject',
+  ],
   open_cash_session: ['p_created_at_local', 'p_device_id'],
   close_cash_session: ['p_reason', 'p_variance_id', 'p_created_at_local', 'p_device_id'],
+  resolve_variance: ['p_note', 'p_detected_at', 'p_created_at_local', 'p_device_id'],
 };
 
 /** La fonction appelée pour chaque type d'événement (voir `RPC_BY_EVENT`). */
@@ -82,6 +90,7 @@ const RPC: Partial<Record<EventType, string>> = {
   EXPENSE_RECORDED: 'record_expense',
   CASH_SESSION_OPENED: 'open_cash_session',
   CASH_SESSION_CLOSED: 'close_cash_session',
+  STOCK_VARIANCE_DETECTED: 'resolve_variance',
 };
 
 const ID = '00000000-0000-0000-0000-0000000000aa';
@@ -119,6 +128,11 @@ const PAYLOADS: Partial<Record<EventType, Record<string, unknown>>> = {
     cashSessionId: ID, shiftNumber: 2, openingCash: 5000,
     expected: 12000, countedCash: 11500, variance: -500, reason: 'rendu de monnaie',
   },
+  STOCK_VARIANCE_DETECTED: {
+    siteId: ID, source: 'DEBT', referenceId: ID, subject: 'Emprunt — Bouna',
+    theoretical: 0, declared: 3000, delta: 3000, amount: 3000,
+    detectedAt: '2026-08-15T09:00:00.000Z', resolution: 'REMBOURSE', note: undefined,
+  },
 };
 
 function eventOf(eventType: EventType): DomainEvent {
@@ -142,8 +156,8 @@ function eventOf(eventType: EventType): DomainEvent {
 describe('arguments RPC', () => {
   const types = Object.keys(RPC) as EventType[];
 
-  it('couvre dix des quinze types d\'événements', () => {
-    expect(types).toHaveLength(10);
+  it('couvre onze des quinze types d\'événements', () => {
+    expect(types).toHaveLength(11);
   });
 
   it.each(types)('%s : aucun argument inconnu de la fonction', (eventType) => {

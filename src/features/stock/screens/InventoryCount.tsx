@@ -37,7 +37,15 @@ export function InventoryCount() {
     return { item, theoretical, counted, delta };
   });
 
-  const entered = rows.filter((r) => r.counted !== null);
+  /*
+   * Un comptage négatif n'existe pas dans le monde réel — on ne compte jamais
+   * moins de zéro article sur une étagère. Laissé sans garde, un « -1 » tapé
+   * par erreur devient un mouvement d'AJUSTEMENT qui fixe le stock directement
+   * à cette valeur négative : plus direct et plus silencieux qu'une perte mal
+   * dimensionnée, puisque rien ici ne compare à un « disponible ».
+   */
+  const negative = rows.filter((r) => r.counted !== null && r.counted < 0);
+  const entered = rows.filter((r) => r.counted !== null && r.counted >= 0);
   const withGap = entered.filter((r) => Math.abs(r.delta ?? 0) > 0.0001);
   const missingReason = withGap.filter((r) => !reasons[r.item.id]);
   const lossValue = withGap.reduce(
@@ -81,7 +89,7 @@ export function InventoryCount() {
             </p>
 
             <div className="space-y-2.5">
-              {rows.map(({ item }) => (
+              {rows.map(({ item, counted }) => (
                 <Field
                   key={item.id}
                   label={item.name}
@@ -91,6 +99,7 @@ export function InventoryCount() {
                   suffix={UNIT_LABEL[item.unit]}
                   value={counts[item.id] ?? ''}
                   onChange={(e) => setCounts((c) => ({ ...c, [item.id]: e.target.value }))}
+                  error={counted !== null && counted < 0 ? 'Un comptage ne peut pas être négatif' : undefined}
                 />
               ))}
             </div>
@@ -174,12 +183,14 @@ export function InventoryCount() {
             variant="primary"
             size="counter"
             full
-            disabled={entered.length === 0}
+            disabled={entered.length === 0 || negative.length > 0}
             onClick={() => setRevealed(true)}
           >
-            {entered.length === 0
-              ? 'Saisissez au moins un comptage'
-              : `Comparer ${entered.length} comptage${entered.length > 1 ? 's' : ''}`}
+            {negative.length > 0
+              ? 'Corrigez les comptages négatifs'
+              : entered.length === 0
+                ? 'Saisissez au moins un comptage'
+                : `Comparer ${entered.length} comptage${entered.length > 1 ? 's' : ''}`}
           </Button>
         ) : (
           <Button

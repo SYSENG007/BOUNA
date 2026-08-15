@@ -16,12 +16,13 @@
 import type { UUID } from './types';
 import type { Actor } from './actor';
 
-export type VarianceSource = 'CASH' | 'STOCK' | 'YIELD';
+export type VarianceSource = 'CASH' | 'STOCK' | 'YIELD' | 'DEBT';
 
 export const VARIANCE_SOURCE_LABEL: Record<VarianceSource, string> = {
   CASH: 'Caisse',
   STOCK: 'Stock',
   YIELD: 'Rendement',
+  DEBT: 'Dette',
 };
 
 /**
@@ -29,7 +30,7 @@ export const VARIANCE_SOURCE_LABEL: Record<VarianceSource, string> = {
  * coûtent de l'argent (perte, vol, offert), un n'en coûte pas (erreur de
  * saisie), un le constate sans l'expliquer (ajustement).
  */
-export type Resolution = 'PERTE' | 'ERREUR_SAISIE' | 'OFFERT' | 'VOL' | 'AJUSTEMENT';
+export type Resolution = 'PERTE' | 'ERREUR_SAISIE' | 'OFFERT' | 'VOL' | 'AJUSTEMENT' | 'REMBOURSE';
 
 export const RESOLUTION_LABEL: Record<Resolution, string> = {
   PERTE: 'Perte constatée',
@@ -37,10 +38,19 @@ export const RESOLUTION_LABEL: Record<Resolution, string> = {
   OFFERT: 'Offert ou consommé sur place',
   VOL: 'Vol',
   AJUSTEMENT: 'Ajustement sans explication',
+  REMBOURSE: 'Remboursé',
 };
 
 /** Un motif qui reconnaît une sortie d'argent réelle. */
 export const COSTLY_RESOLUTIONS: readonly Resolution[] = ['PERTE', 'VOL', 'OFFERT'];
+
+/** Les seuls motifs qui répondent à un écart de dette — les cinq autres ne s'y appliquent pas. */
+export const DEBT_RESOLUTIONS: readonly Resolution[] = ['REMBOURSE'];
+
+/** Le vocabulaire de résolution pertinent pour la source de l'écart. */
+export function resolutionsFor(source: VarianceSource): readonly Resolution[] {
+  return source === 'DEBT' ? DEBT_RESOLUTIONS : ['PERTE', 'ERREUR_SAISIE', 'OFFERT', 'VOL', 'AJUSTEMENT'];
+}
 
 export function isCostly(resolution: Resolution): boolean {
   return COSTLY_RESOLUTIONS.includes(resolution);
@@ -105,7 +115,7 @@ export interface VarianceBreakdown {
 }
 
 export function breakdownBySource(variances: Variance[]): VarianceBreakdown[] {
-  const sources: VarianceSource[] = ['CASH', 'STOCK', 'YIELD'];
+  const sources: VarianceSource[] = ['CASH', 'STOCK', 'YIELD', 'DEBT'];
   return sources.map((source) => {
     const rows = variances.filter((v) => v.source === source);
     const open = rows.filter(isOpen);

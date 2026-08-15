@@ -3,15 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useBuna } from '../../../store/BunaStore';
 import { fcfa, fcfaFull } from '../../../domain/money';
 import {
-  breakdownBySource, isCostly, openVariances, recoveredCost, RESOLUTION_LABEL,
+  breakdownBySource, isCostly, openVariances, recoveredCost, resolutionsFor, RESOLUTION_LABEL,
   unresolvedAmount, VARIANCE_SOURCE_LABEL, type Resolution, type Variance,
 } from '../../../domain/variance';
 import { ScreenHeader } from '../../../design-system/components/patterns';
 import { ActorStamp } from '../../../design-system/components/ActorStamp';
 import { Badge, Button, Card, Field, SectionLabel } from '../../../design-system/components/primitives';
 import { VarianceBar } from '../../../design-system/charts';
-
-const RESOLUTIONS: Resolution[] = ['PERTE', 'ERREUR_SAISIE', 'OFFERT', 'VOL', 'AJUSTEMENT'];
 
 /**
  * Écarts et recouvrements.
@@ -95,7 +93,9 @@ export function Ecarts() {
                   </div>
                 </div>
                 <ActorStamp actor={v.actor} showCapability />
-                <Button full onClick={() => setActive(v)}>Donner un motif</Button>
+                <Button full onClick={() => setActive(v)}>
+                  {v.source === 'DEBT' ? 'Marquer remboursé' : 'Donner un motif'}
+                </Button>
               </Card>
             ))}
           </section>
@@ -148,21 +148,28 @@ function ResolveSheet({
 }) {
   const [choice, setChoice] = useState<Resolution | null>(null);
   const [note, setNote] = useState('');
+  const isDebt = variance.source === 'DEBT';
+  const options = resolutionsFor(variance.source);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <button type="button" aria-label="Fermer" onClick={onClose} className="absolute inset-0 bg-cafe/45" />
       <div className="safe-b relative w-full max-w-md rounded-t-[16px] bg-ivoire p-4 sm:rounded-[16px]"
         style={{ boxShadow: 'var(--shadow-e2)' }}>
-        <h2 className="font-display text-[20px] leading-tight text-cafe">Que s'est-il passé ?</h2>
+        <h2 className="font-display text-[20px] leading-tight text-cafe">
+          {isDebt ? 'Cette dette est-elle remboursée ?' : "Que s'est-il passé ?"}
+        </h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-600">
-          {variance.subject} · écart de{' '}
+          {variance.subject} ·{' '}
+          {isDebt ? 'montant dû' : 'écart de'}{' '}
           <strong className="num text-ink-900">{fcfa(variance.amount)} FCFA</strong>.
-          Le motif décide si cet écart coûte de l'argent ou non.
+          {isDebt
+            ? ' Elle reste ouverte tant que personne ne confirme le remboursement.'
+            : " Le motif décide si cet écart coûte de l'argent ou non."}
         </p>
 
         <div className="mt-4 space-y-2">
-          {RESOLUTIONS.map((r) => (
+          {options.map((r) => (
             <button
               key={r}
               type="button"
@@ -196,7 +203,7 @@ function ResolveSheet({
             disabled={!choice}
             onClick={() => choice && onResolve(choice, note.trim() || undefined)}
           >
-            Solder l'écart
+            {isDebt ? 'Confirmer le remboursement' : "Solder l'écart"}
           </Button>
         </div>
       </div>

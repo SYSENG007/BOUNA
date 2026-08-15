@@ -28,6 +28,14 @@ const RPC_BY_EVENT: Partial<Record<DomainEvent['eventType'], string>> = {
   EXPENSE_RECORDED: 'record_expense',
   CASH_SESSION_OPENED: 'open_cash_session',
   CASH_SESSION_CLOSED: 'close_cash_session',
+  /*
+   * Le nom porte mal son usage : cet événement sert à la RÉSOLUTION d'un
+   * écart, pas à sa détection — la détection n'a jamais eu son propre
+   * événement, elle naît en silence à l'intérieur d'une autre transaction
+   * (compte d'inventaire, clôture, batch, ou maintenant une dépense
+   * empruntée). On ne renomme pas ce vocabulaire déjà en place ; on le câble.
+   */
+  STOCK_VARIANCE_DETECTED: 'resolve_variance',
 };
 
 /*
@@ -309,6 +317,12 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         // chaîne vide parte casser un cast d'UUID côté serveur.
         p_supplier_id: asUuid(payload.supplierId),
         p_payment_method: payload.paymentMethod ?? 'CASH',
+        // Présents seulement si la dépense a ouvert une dette (emprunt pour
+        // couvrir un tiroir insuffisant) — absents sinon, ce que `record_expense`
+        // lit comme « pas d'écart à ouvrir ».
+        p_variance_id: payload.varianceId ?? null,
+        p_variance_amount: payload.varianceAmount ?? 0,
+        p_variance_subject: payload.varianceSubject ?? null,
         p_created_at_local: event.createdAtLocal,
         p_device_id: event.deviceId,
       };
@@ -335,6 +349,25 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         p_counted_cash: payload.countedCash,
         p_variance: payload.variance,
         p_reason: payload.reason ?? null,
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'STOCK_VARIANCE_DETECTED':
+      return {
+        p_event_id: event.id,
+        p_variance_id: event.entityId,
+        p_site_id: payload.siteId ?? event.siteId,
+        p_source: payload.source,
+        p_reference_id: payload.referenceId,
+        p_subject: payload.subject,
+        p_theoretical: payload.theoretical ?? 0,
+        p_declared: payload.declared ?? 0,
+        p_delta: payload.delta ?? 0,
+        p_amount: payload.amount ?? 0,
+        p_resolution: payload.resolution,
+        p_note: payload.note ?? null,
+        p_detected_at: payload.detectedAt ?? null,
         p_created_at_local: event.createdAtLocal,
         p_device_id: event.deviceId,
       };

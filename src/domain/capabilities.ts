@@ -35,7 +35,7 @@ export const CAPABILITIES = [
   'RECORD_EXPENSE', 'VIEW_FINANCES', 'CLOSE_DAY', 'REOPEN_DAY',
   /* Pilotage */
   'VIEW_DASHBOARD', 'MANAGE_CATALOG', 'MANAGE_LOCATIONS', 'MANAGE_TEAM', 'VIEW_AUDIT_LOG',
-  'MANAGE_SETTINGS',
+  'MANAGE_SETTINGS', 'RUN_SIMULATION',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -78,6 +78,11 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   /* Le libellé nomme l'effet, pas l'écran : ce réglage décide de ce que
      l'application exige de TOUTE l'équipe, pas seulement de qui l'ouvre. */
   MANAGE_SETTINGS: 'Choisir comment la maison suit ses coûts',
+  /* Elle n'est pas rangée avec MANAGE_SETTINGS par hasard — mais elle en est
+     bien distincte : entrer en simulation déplace la personne dans une autre
+     maison, ce qu'aucun réglage ne fait. Deux décisions différentes, donc deux
+     capacités révocables séparément. */
+  RUN_SIMULATION: 'Simuler une journée sans toucher aux chiffres',
 };
 
 /** À quelle feature chaque capacité se rattache — la navigation en dépend. */
@@ -96,6 +101,7 @@ export const CAPABILITY_FEATURE: Record<Capability, FeatureId> = {
 
   VIEW_DASHBOARD: 'PILOTAGE', MANAGE_CATALOG: 'PILOTAGE', MANAGE_LOCATIONS: 'PILOTAGE',
   MANAGE_TEAM: 'PILOTAGE', VIEW_AUDIT_LOG: 'PILOTAGE', MANAGE_SETTINGS: 'PILOTAGE',
+  RUN_SIMULATION: 'PILOTAGE',
 };
 
 /* ----------------------------------------------------------------- Postes */
@@ -149,6 +155,10 @@ const MANAGER_PRESET: Capability[] = [...new Set<Capability>([
      propriétaire : c'est le manager qui est là quand la méthode ne colle plus
      au terrain. Il reste révocable comme n'importe quelle autre capacité. */
   'MANAGE_SETTINGS',
+  /* Éprouver une journée entière avant de la faire vivre à l'équipe est un
+     geste d'encadrement, au même titre. Et c'est le manager, pas le
+     propriétaire, qui forme quelqu'un un mardi matin. */
+  'RUN_SIMULATION',
 ])];
 
 /**

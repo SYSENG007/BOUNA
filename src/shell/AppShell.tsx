@@ -7,7 +7,7 @@ import { BunaLockup, BunaLogo } from '../design-system/components/BunaLogo';
 import { SyncIndicator } from '../design-system/components/SyncIndicator';
 import { IconChevronLeft, IconChevronRight } from '../design-system/icons';
 import { POST_LABEL } from '../domain/capabilities';
-import { SIMULATION_NOTICE, isSimulation } from '../domain/simulation';
+import { SIMULATION_NOTICE } from '../domain/simulation';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Login } from './Login';
 import { OperationSheet } from './OperationSheet';
@@ -47,7 +47,7 @@ const RAIL_SHUT = '76px';
 const RAIL_PREF = 'buna.rail-collapsed';
 
 export function AppShell() {
-  const { user, logout } = useBuna();
+  const { user, logout, simulating } = useBuna();
   const { pathname } = useLocation();
   const { isMobile } = useAdaptive();
   const navigate = useNavigate();
@@ -212,7 +212,7 @@ export function AppShell() {
       )}
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-        {isSimulation(user.organizationId) && <SimulationBanner />}
+        {simulating && <SimulationBanner />}
         <div
           className="shell-canvas flex flex-1 flex-col"
           style={isMobile && !immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
@@ -268,20 +268,41 @@ export function AppShell() {
  * laquelle on travaille.
  */
 function SimulationBanner() {
+  const { leaveSimulation, simulationBusy } = useBuna();
+  const [failure, setFailure] = useState<string | null>(null);
+
   return (
     <div
       role="status"
-      className="flex items-center gap-2.5 border-b border-info/25 bg-info-pale px-4 py-2 text-info-deep"
+      className="border-b border-info/25 bg-info-pale px-4 py-2 text-info-deep"
     >
-      <span
-        aria-hidden
-        className="inline-block size-1.5 shrink-0 rounded-full bg-info"
-      />
-      <p className="text-[12.5px] leading-snug">
-        <span className="font-semibold">{SIMULATION_NOTICE.title}</span>
-        <span className="mx-1.5 opacity-40">·</span>
-        {SIMULATION_NOTICE.body}
-      </p>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className="inline-block size-1.5 shrink-0 rounded-full bg-info" />
+        <p className="min-w-0 flex-1 text-[12.5px] leading-snug">
+          <span className="font-semibold">{SIMULATION_NOTICE.title}</span>
+          <span className="mx-1.5 opacity-40">·</span>
+          {SIMULATION_NOTICE.body}
+        </p>
+        {/*
+          La sortie est ici, et pas seulement dans le Profil : on peut se
+          retrouver en simulation sans savoir comment on y est entré — un
+          appareil laissé ouvert, un collègue qui a montré quelque chose. Le
+          chemin du retour doit être là où le constat se fait.
+
+          Le libellé nomme exactement son effet, et rien de plus : quitter ne
+          supprime rien. Effacer est un autre geste, dans le Profil.
+        */}
+        <button
+          type="button"
+          disabled={simulationBusy}
+          onClick={() => { setFailure(null); void leaveSimulation().then(setFailure); }}
+          className="shrink-0 rounded-md border border-info/35 px-2.5 py-1 text-[12px] font-medium
+                     transition-colors hover:bg-info/10 disabled:opacity-50"
+        >
+          {simulationBusy ? 'Sortie…' : 'Quitter la simulation'}
+        </button>
+      </div>
+      {failure && <p className="mt-1.5 pl-4 text-[12px] leading-snug text-critique">{failure}</p>}
     </div>
   );
 }

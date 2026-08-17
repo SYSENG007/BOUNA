@@ -103,11 +103,20 @@ Les tests d'acceptation dérivent du §107 du PRD. Une règle du PRD qui n'a pas
 test n'est pas tenue pour acquise.
 
 Pour éprouver un cycle complet contre le vrai serveur sans toucher aux chiffres
-de la maison : `scripts/simulation.sh start`, puis `docs/SIMULATION.md`. Le bac
-à sable est une SECONDE ORGANISATION, pas un mode de l'application — RLS tient
-l'étanchéité, et la purge tient en un `delete` qui cascade. Ne jamais y
+de la maison : ouvrir `/pilotage/simulation` (adresse à taper, aucun lien n'y
+mène), puis `docs/SIMULATION.md`.
+
+Le bac à sable est une SECONDE ORGANISATION, pas un mode de l'application — RLS
+tient l'étanchéité, et la purge tient en un `delete` qui cascade. Ne jamais y
 substituer un drapeau `is_simulation` sur les lignes : ce serait le même défaut
 que le `if (mode === ...)` semé dans les écrans.
+
+Entrer déplace le PROFIL de la personne, qui garde son nom et ses droits ; en
+sortir le ramène, grâce aux colonnes `home_*`. Aucune fonction appelable depuis
+un navigateur n'écrit dans `auth.users` — c'est cette contrainte qui a décidé du
+dispositif. Et `profiles.organization_id` cascade depuis `organizations` : la
+purge ramène tout le monde AVANT de supprimer, sans quoi elle détruirait des
+comptes.
 
 Vérifier plutôt que supposer : un cache PostgREST périmé, un `revoke` sans effet
 ou une vue `SECURITY DEFINER` se voient uniquement en interrogeant la base.

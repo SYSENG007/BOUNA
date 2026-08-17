@@ -264,6 +264,26 @@ export const FEATURES: Feature[] = [
         to: '/pilotage/reglages', requires: 'MANAGE_SETTINGS', Icon: IconSettings, declares: false,
       },
       {
+        /*
+         * VOLONTAIREMENT SANS `to`.
+         *
+         * L'écran existe et sa route est déclarée (`/pilotage/simulation`),
+         * mais aucune destination n'est publiée ici — donc le tiroir et les
+         * raccourcis du profil l'ignorent, et aucun lien ne le montre. On y va
+         * en tapant l'adresse. C'est un choix du propriétaire : le bac à sable
+         * ne doit pas se découvrir en explorant les menus, parce qu'y entrer
+         * change la maison dans laquelle on travaille.
+         *
+         * L'opération reste inscrite ici, et c'est tout l'intérêt du `to`
+         * optionnel : c'est ce registre qui rend une capacité délégable depuis
+         * l'écran Équipe. Un droit qu'on ne pourrait pas retirer ne serait pas
+         * un droit accordé.
+         */
+        id: 'pilot.simulation', label: CAPABILITY_LABEL.RUN_SIMULATION,
+        hint: 'Jouer une journée entière sur une copie, sans toucher aux chiffres',
+        requires: 'RUN_SIMULATION', Icon: IconSettings, declares: false,
+      },
+      {
         id: 'pilot.journal', label: CAPABILITY_LABEL.VIEW_AUDIT_LOG,
         hint: 'Chaque opération, son auteur, et sous quelle autorisation',
         to: '/pilotage/journal', requires: 'VIEW_AUDIT_LOG', Icon: IconUser, declares: false,

@@ -40,6 +40,7 @@ import { Reglages } from './features/pilotage/screens/Reglages';
 import { Catalogue } from './features/pilotage/screens/Catalogue';
 import { Alertes } from './features/pilotage/screens/Alertes';
 import { Profil } from './features/pilotage/screens/Profil';
+import { Simulation } from './features/pilotage/screens/Simulation';
 
 /**
  * Garde de route.
@@ -114,6 +115,11 @@ export default function App() {
               <Route path="/pilotage/catalogue" element={guard(['MANAGE_CATALOG'], <CatalogManager />)} />
               <Route path="/pilotage/emplacements" element={guard(['MANAGE_LOCATIONS'], <LocationManager />)} />
               <Route path="/pilotage/reglages" element={guard(['MANAGE_SETTINGS'], <Reglages />)} />
+              {/* Sans garde : la page s'ouvre pour tout le monde et dit à qui n'a pas
+                  le droit qu'il ne l'a pas. Une page qui redirige en silence laisse
+                  croire à un lien cassé — et c'est le serveur qui refuse, de toute
+                  façon. */}
+              <Route path="/pilotage/simulation" element={<Simulation />} />
 
               <Route path="/catalogue" element={guard(['VIEW_STOCK'], <Catalogue />)} />
               <Route path="/alertes" element={<Alertes />} />

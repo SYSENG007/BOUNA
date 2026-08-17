@@ -28,6 +28,61 @@ const event = (over: Partial<DomainEvent>): DomainEvent => ({
   syncStatus: 'QUEUED', attempts: 0, ...over,
 });
 
+/*
+ * Le SQL versionné, lu par `import.meta.glob` plutôt que par `node:fs` : ce
+ * fichier vit sous un tsconfig qui vise le navigateur. Même procédé que
+ * `prereglages.test.ts`, et pour la même raison.
+ */
+const MIGRATIONS = import.meta.glob('../../../supabase/migrations/*.sql', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+const sqlDuBacASable = (): string => {
+  const entree = Object.entries(MIGRATIONS).find(([chemin]) => chemin.includes('bac_a_sable'));
+  expect(entree, 'aucune migration de bac à sable trouvée').toBeDefined();
+  return entree![1];
+};
+
+describe("le client et la base désignent le même bac à sable", () => {
+  /**
+   * Deux représentations d'un même identifiant, et c'est irréductible : le
+   * client doit reconnaître la simulation au premier rendu, sans réseau
+   * (RULE-010), et PostgreSQL doit la désigner dans des fonctions qui ne
+   * peuvent rien lire du bundle.
+   *
+   * Ce qui est réductible, c'est le silence. Si les deux divergent, le bandeau
+   * « Mode simulation » ne s'affiche plus alors que la personne EST dans le bac
+   * à sable — elle croit travailler pour de vrai, ou l'inverse. C'est le pire
+   * défaut que ce dispositif puisse produire, et rien à l'écran ne le dirait.
+   */
+  it("`simulation_org_id()` rend exactement SIMULATION_ORG_ID", () => {
+    const corps = /create or replace function public\.simulation_org_id\(\)[\s\S]*?\$\$([\s\S]*?)\$\$/
+      .exec(sqlDuBacASable());
+    expect(corps, 'fonction simulation_org_id introuvable dans le SQL').not.toBeNull();
+
+    const litteral = /'([0-9a-f-]{36})'/i.exec(corps![1]);
+    expect(litteral, 'aucun UUID lisible dans simulation_org_id').not.toBeNull();
+    expect(litteral![1]).toBe(SIMULATION_ORG_ID);
+  });
+
+  /**
+   * Le nom est le second verrou de la purge : `purge_simulation` refuse de
+   * supprimer une organisation qui ne le porte pas exactement. Le renommer d'un
+   * côté sans l'autre rendrait la purge inopérante — silencieusement, puisque
+   * la fonction se contente de lever une exception que personne ne lit.
+   */
+  it("le garde-fou de la purge nomme l'organisation que la construction crée", () => {
+    const sql = sqlDuBacASable();
+    const cree = /insert into public\.organizations[\s\S]*?'(BUNA[^']*)'/.exec(sql);
+    const garde = /is distinct from '(BUNA[^']*)'/.exec(sql);
+    expect(cree, "nom de l'organisation créée introuvable").not.toBeNull();
+    expect(garde, 'garde-fou de la purge introuvable').not.toBeNull();
+    expect(garde![1]).toBe(cree![1]);
+  });
+});
+
 describe("le bac à sable se reconnaît à son organisation", () => {
   it('ne confond pas la maison réelle avec la simulation', () => {
     expect(isSimulation(SIMULATION_ORG_ID)).toBe(true);

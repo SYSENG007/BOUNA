@@ -32,7 +32,12 @@ function convertible(from: Unit, to: Unit | undefined): to is Unit {
 }
 import { awaitingAnotherOrg, dueEvents, ofOrg, pendingEvents, selectTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
-import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
+import { loadProfile, restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
+import {
+  enterSimulation as rpcEnter, leaveSimulation as rpcLeave, purgeSimulation as rpcPurge,
+  type SimulationOutcome,
+} from '../backend/simulation';
+import { isSimulation } from '../domain/simulation';
 import { supabaseTransport } from '../backend/transport';
 import { crossCheckStock, fetchSnapshot, type Snapshot } from '../backend/hydrate';
 import { itemRow, recipeRows } from '../backend/mappers';
@@ -170,12 +175,29 @@ export type Action =
   | { type: 'RESOLVE_VARIANCE'; varianceId: UUID; resolution: Resolution; note?: string; by: Actor }
   | { type: 'DISMISS'; key: string; day: string }
   | { type: 'RESTORE_LIST'; prefix: string }
-  | { type: 'RECOVER_OUTBOX'; events: DomainEvent[] };
+  | { type: 'RECOVER_OUTBOX'; events: DomainEvent[] }
+  /** Changement de maison — entrée ou sortie du bac à sable de simulation. */
+  | { type: 'SWITCH_ORG' };
 
 export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'HYDRATE':
       return action.state;
+
+    /*
+     * On a changé de maison : le cache ne parle plus de celle-ci.
+     *
+     * Sans cette remise à zéro, la personne verrait le stock, les ventes et la
+     * trésorerie de la maison réelle sous un bandeau « Mode simulation »,
+     * jusqu'à ce que l'hydratation arrive. Le pire des deux mondes : des
+     * chiffres vrais présentés comme faux, ou l'inverse.
+     *
+     * La FILE est conservée. Un fait daté appartient à son organisation et
+     * attend sa session (voir `ofOrg`) : le jeter ici, ce serait perdre une
+     * vente encaissée hors ligne parce que quelqu'un a ouvert une simulation.
+     */
+    case 'SWITCH_ORG':
+      return { ...initialState, currentUserId: state.currentUserId, events: state.events };
 
     case 'HYDRATE_SNAPSHOT': {
       const s = action.snapshot;
@@ -423,6 +445,20 @@ interface Ctx {
   signIn: (email: string, password: string) => Promise<string | null>;
   /** Vrai tant que la session n'a pas été restaurée au démarrage. */
   authLoading: boolean;
+  /** Vrai quand la personne travaille dans le bac à sable de simulation. */
+  simulating: boolean;
+  /**
+   * Entre dans le bac à sable, en le montant s'il n'existe pas encore. Réservé
+   * à RUN_SIMULATION, et revérifié par le serveur. Rend `null` si tout va bien,
+   * sinon un message prêt à afficher.
+   */
+  enterSimulation: () => Promise<SimulationOutcome>;
+  /** Ramène la personne dans sa maison. Jamais refusé. */
+  leaveSimulation: () => Promise<SimulationOutcome>;
+  /** Efface le bac à sable et ramène tout le monde. Réservé à RUN_SIMULATION. */
+  purgeSimulation: () => Promise<SimulationOutcome>;
+  /** Vrai pendant l'aller-retour serveur d'une entrée, sortie ou purge. */
+  simulationBusy: boolean;
   backendConfigured: boolean;
   /** Vrai pendant qu'un instantané PostgreSQL est en cours de chargement. */
   hydrating: boolean;
@@ -550,6 +586,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   const [hydratedAt, setHydratedAt] = useState<string | null>(null);
   /* Faux quand le miroir de la file a refusé d'écrire : à signaler, pas à taire. */
   const [outboxDurable, setOutboxDurable] = useState(true);
+  /* Vrai pendant qu'on entre, sort ou efface une simulation. */
+  const [simulationBusy, setSimulationBusy] = useState(false);
   /* Vrai une fois le miroir relu : rien ne s'écrit avant, sous peine de l'effacer. */
   const [recovered, setRecovered] = useState(false);
   /*
@@ -2053,6 +2091,47 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     };
   }, [syncNow]);
 
+  /* ------------------------------------------------- Bac à sable */
+
+  /**
+   * Un aller-retour de simulation, quel qu'il soit.
+   *
+   * Le serveur déplace le profil ; il reste à faire trois choses ici, et
+   * l'ordre compte. D'abord relire le profil : c'est lui qui porte
+   * l'organisation, donc `orgId`, donc la destination de tout ce qui sera
+   * écrit ensuite. Ensuite vider le cache : les projections en mémoire
+   * décrivent la maison qu'on vient de quitter. Enfin redemander un
+   * instantané.
+   *
+   * Si l'appel échoue, on ne touche à RIEN. Un profil resté sur place avec un
+   * cache vidé afficherait une maison vide en prétendant que c'est la vraie.
+   */
+  const simulationStep = useCallback(
+    async (rpc: () => Promise<SimulationOutcome>): Promise<SimulationOutcome> => {
+      if (simulationBusy) return null;
+      setSimulationBusy(true);
+      try {
+        const failure = await rpc();
+        if (failure) return failure;
+
+        const profile = await loadProfile();
+        if (profile) setRemoteProfile(profile);
+        dispatch({ type: 'SWITCH_ORG' });
+        stale.current = true;
+        return null;
+      } finally {
+        setSimulationBusy(false);
+      }
+    },
+    [simulationBusy],
+  );
+
+  const enterSimulation = useCallback(() => simulationStep(rpcEnter), [simulationStep]);
+  const leaveSimulation = useCallback(() => simulationStep(rpcLeave), [simulationStep]);
+  /* Effacer ramène tout le monde, celui qui appelle compris : c'est donc aussi
+     une sortie, et le même enchaînement s'applique. */
+  const purgeSimulation = useCallback(() => simulationStep(rpcPurge), [simulationStep]);
+
   const value: Ctx = {
     state, user, users: USERS, items: itemsMap, stock, online, pending, awaitingElsewhere, syncing, lastSyncAt,
     can, grants: state.grants, variances: state.variances,
@@ -2069,6 +2148,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       return error;
     },
     authLoading,
+    simulating: isSimulation(user?.organizationId),
+    enterSimulation, leaveSimulation, purgeSimulation, simulationBusy,
     backendConfigured: isBackendConfigured,
     hydrating,
     hydratedAt,

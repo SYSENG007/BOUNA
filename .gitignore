@@ -31,3 +31,6 @@ dev-dist/
 
 # Sauvegardes pg_dump — ne jamais versionner des données réelles
 backups/
+
+# Les worktrees de travail sont locaux à la machine, jamais versionnés.
+.claude/worktrees/

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -44,4 +45,15 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
+  test: {
+    /*
+     * Les worktrees de travail vivent sous `.claude/worktrees/` — donc DANS
+     * l'arborescence du dépôt. Sans cette exclusion, vitest y trouve une
+     * seconde copie de toute la suite et la joue deux fois : 602 tests au lieu
+     * de 305. Le coût n'est pas la durée, c'est le diagnostic — un worktree
+     * laissé dans un état intermédiaire fait échouer la suite du dépôt
+     * principal, pour une raison qui n'apparaît nulle part dans son code.
+     */
+    exclude: [...configDefaults.exclude, '**/.claude/worktrees/**'],
+  },
 })

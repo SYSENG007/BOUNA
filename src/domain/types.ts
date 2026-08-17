@@ -43,7 +43,8 @@ export interface User {
 
 export interface Site { id: UUID; organizationId: UUID; name: string }
 
-export type LocationType = 'CENTRAL' | 'KITCHEN' | 'FRIDGE' | 'POS' | 'RESERVE';
+export const LOCATION_TYPES = ['CENTRAL', 'KITCHEN', 'FRIDGE', 'POS', 'RESERVE'] as const;
+export type LocationType = (typeof LOCATION_TYPES)[number];
 export interface StockLocation { id: UUID; siteId: UUID; name: string; type: LocationType }
 
 /* ------------------------------------------------------------ Catalogue */
@@ -61,7 +62,17 @@ export const ITEM_KIND_LABEL: Record<ItemKind, string> = {
  * Les unités que la base connaît — le type `unit_code` en PostgreSQL. Tout ce
  * qui est enregistré s'exprime dans l'une d'elles, sans exception.
  */
-export type Unit = 'kg' | 'g' | 'L' | 'mL' | 'unite' | 'sachet' | 'bouteille' | 'paquet' | 'carton';
+/*
+ * La liste est un TABLEAU dont le type dérive, et non l'inverse. Le type seul
+ * s'efface à la compilation : rien ne peut alors le comparer à l'enum
+ * `unit_code` en base, et la divergence attend d'être découverte par un
+ * utilisateur. Le tableau, lui, se lit à l'exécution — c'est ce qui rend
+ * `prereglages.test.ts` capable de tenir le contrat client/serveur.
+ */
+export const UNITS = [
+  'kg', 'g', 'L', 'mL', 'unite', 'sachet', 'bouteille', 'paquet', 'carton',
+] as const;
+export type Unit = (typeof UNITS)[number];
 
 /**
  * Les unités qu'on accepte à la SAISIE, jamais à l'enregistrement.
@@ -128,7 +139,8 @@ export interface Item {
   productionMode?: ProductionMode;
 }
 
-export type ProductionMode = 'BATCH' | 'MADE_TO_ORDER';
+export const PRODUCTION_MODES = ['BATCH', 'MADE_TO_ORDER'] as const;
+export type ProductionMode = (typeof PRODUCTION_MODES)[number];
 
 /** Un produit assemblé à la commande n'a pas de stock de produit fini. */
 export function isMadeToOrder(item: { productionMode?: ProductionMode }): boolean {
@@ -239,7 +251,10 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 /** §53 — chaque mutation porte son état de synchronisation. */
-export type SyncStatus = 'LOCAL_ONLY' | 'QUEUED' | 'SYNCING' | 'SYNCED' | 'FAILED' | 'CONFLICT';
+export const SYNC_STATUSES = [
+  'LOCAL_ONLY', 'QUEUED', 'SYNCING', 'SYNCED', 'FAILED', 'CONFLICT',
+] as const;
+export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 export interface DomainEvent<P = unknown> {
   /** §56 — UUID généré localement AVANT toute connexion : clé d'idempotence. */
@@ -279,7 +294,8 @@ export interface SaleLine {
   unitCost: number;
 }
 
-export type SaleStatus = 'COMPLETED' | 'VOIDED' | 'REFUNDED';
+export const SALE_STATUSES = ['COMPLETED', 'VOIDED', 'REFUNDED'] as const;
+export type SaleStatus = (typeof SALE_STATUSES)[number];
 
 export interface Sale {
   id: UUID;
@@ -437,7 +453,8 @@ export interface InventoryCount {
 
 /* ------------------------------------------------------- Notifications */
 
-export type Severity = 'INFO' | 'ATTENTION' | 'ACTION_REQUIRED' | 'CRITICAL';
+export const SEVERITIES = ['INFO', 'ATTENTION', 'ACTION_REQUIRED', 'CRITICAL'] as const;
+export type Severity = (typeof SEVERITIES)[number];
 export type NotificationStatus = 'UNREAD' | 'READ' | 'ACKNOWLEDGED' | 'RESOLVED';
 
 export interface Notification {

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CAPABILITIES, POSTS, POST_PRESET } from '../capabilities';
 import { OPERATING_MODES } from '../operating-mode';
 import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL } from '../variance';
-import { ITEM_KIND_LABEL, MOVEMENT_TYPES } from '../types';
+import {
+  ITEM_KIND_LABEL, LOCATION_TYPES, MOVEMENT_TYPES, PRODUCTION_MODES,
+  SALE_STATUSES, SEVERITIES, SYNC_STATUSES, UNITS,
+} from '../types';
 
 /**
  * Le client et le serveur disent-ils la même chose ?
@@ -119,10 +122,20 @@ describe("L'enum SQL des capacités suit celui du client", () => {
         `create type (?:public\\.)?${type} as enum\\s*\\(([^)]*)\\)`, 'i',
       ).exec(sql);
       if (creation) {
-        for (const m of creation[1].matchAll(/'([A-Z_]+)'/g)) valeurs.push(m[1]);
+        // `[A-Za-z_]` et non `[A-Z_]` : `unit_code` vaut « kg », « mL »,
+        // « unite ». Le motif en majuscules seules rendait une liste vide pour
+        // lui, donc un contrat de plus qui paraissait tenu sans l'être.
+        //
+        // Et on dédoublonne : une création peut apparaître deux fois, gardée
+        // par `if not exists` — 0008 pose `production_mode`, 0011 la repose au
+        // cas où. Les deux disent la même chose ; les compter deux fois ferait
+        // échouer la comparaison sur un artefact de lecture.
+        for (const m of creation[1].matchAll(/'([A-Za-z_]+)'/g)) {
+          if (!valeurs.includes(m[1])) valeurs.push(m[1]);
+        }
       }
       const ajouts = sql.matchAll(
-        new RegExp(`alter type (?:public\\.)?${type} add value[^']*'([A-Z_]+)'`, 'gi'),
+        new RegExp(`alter type (?:public\\.)?${type} add value[^']*'([A-Za-z_]+)'`, 'gi'),
       );
       for (const m of ajouts) if (!valeurs.includes(m[1])) valeurs.push(m[1]);
     }
@@ -132,38 +145,103 @@ describe("L'enum SQL des capacités suit celui du client", () => {
     return valeurs;
   }
 
-  it("connaît exactement les capacités de CAPABILITIES", () => {
-    // C'est ce contrôle qui remplace le « 26 » écrit en dur dans
-    // verify_invariants.sql : un nombre magique ne dit pas LAQUELLE manque, et
-    // il faut penser à l'incrémenter — deux occasions de se tromper.
-    expect(enumSql('capability').sort()).toEqual([...CAPABILITIES].sort());
-  });
-
-  it('connaît exactement les postes de POSTS', () => {
-    expect(enumSql('user_post').sort()).toEqual([...POSTS].sort());
-  });
-
   /*
    * Les autres enums partagés. `capability` a dérivé deux fois parce que rien
    * ne les comparait ; il n'y a aucune raison de croire qu'elle était la seule
    * exposée. Chaque ligne ci-dessous est un contrat client/serveur de plus qui
    * cesse de reposer sur la vigilance.
    *
-   * Absent volontairement : `unit_code`, dont les valeurs sont en minuscules
-   * (kg, mL, sachet) et ne passent pas le lexer ci-dessus — et `sync_status`,
-   * `severity`, `sale_status`, `purchase_order_status`, dont le client ne tient
-   * pas de liste à l'exécution. Les ajouter demanderait d'exporter un tableau
-   * là où il n'existe qu'un type : à faire le jour où l'un d'eux bouge.
+   * Un seul enum reste hors de cette liste, et ce n'est pas un report :
+   * `purchase_order_status` n'a AUCUNE contrepartie côté client. Le client ne
+   * modélise pas le cycle d'une commande fournisseur — `Purchase` ne porte pas
+   * ce statut. Il n'y a donc rien à comparer, et inventer une liste pour
+   * satisfaire le test créerait la duplication qu'on cherche à supprimer.
+   * Le jour où un écran affichera ce cycle, sa liste vient ici.
    */
   const PARTAGES: [string, readonly string[]][] = [
+    /*
+     * `capability` remplace le « 26 » qui était écrit en dur dans
+     * verify_invariants.sql : un nombre magique ne dit pas LAQUELLE manque, et
+     * il faut penser à l'incrémenter — deux occasions de se tromper.
+     */
+    ['capability', CAPABILITIES],
+    ['user_post', POSTS],
     ['operating_mode', OPERATING_MODES],
     ['variance_source', Object.keys(VARIANCE_SOURCE_LABEL)],
     ['variance_resolution', Object.keys(RESOLUTION_LABEL)],
     ['item_kind', Object.keys(ITEM_KIND_LABEL)],
     ['movement_type', MOVEMENT_TYPES],
+    ['sync_status', SYNC_STATUSES],
+    ['sale_status', SALE_STATUSES],
+    ['severity', SEVERITIES],
+    /*
+     * `Unit` et non `DosingUnit`. Le client accepte « mg » à la SAISIE — on
+     * achète au kilo et on dose au milligramme — mais le convertit avant
+     * d'enregistrer : « mg » n'est pas et ne doit pas être une valeur de
+     * `unit_code`. Comparer `DosingUnit` ferait échouer ce test sur une
+     * différence voulue, et la vraie leçon serait perdue.
+     */
+    ['unit_code', UNITS],
+    ['location_type', LOCATION_TYPES],
+    ['production_mode', PRODUCTION_MODES],
   ];
 
   it.each(PARTAGES)('dit la même chose que le client pour %s', (type, cote) => {
     expect(enumSql(type).sort()).toEqual([...cote].sort());
+  });
+
+  /**
+   * Les enums que le serveur garde pour lui, déclarés un par un.
+   *
+   * Pas une liste d'exemptions de confort : chaque nom ici est une affirmation
+   * qu'AUCUN écran ne connaît ces valeurs. Le jour où l'un d'eux remonte à
+   * l'interface, il doit passer dans PARTAGES — et le test ci-dessous force
+   * quelqu'un à trancher plutôt qu'à oublier.
+   */
+  const SERVEUR_SEUL = [
+    // Le client ne modélise pas le cycle d'une commande fournisseur :
+    // `Purchase` ne porte pas ce statut. Inventer une liste côté client pour
+    // satisfaire un test créerait la duplication qu'on cherche à supprimer.
+    'purchase_order_status',
+  ];
+
+  it('ne laisse aucun enum hors du contrat, ni partagé ni déclaré serveur', () => {
+    /*
+     * Le test qui rend les précédents durables.
+     *
+     * Sans lui, un enum créé demain n'est comparé à rien : il est hors
+     * couverture PAR DÉFAUT, et personne ne l'apprend. C'est exactement
+     * comment `MANAGE_SETTINGS` a pu diverger. Ici, tout enum nouveau fait
+     * échouer la suite tant qu'on n'a pas dit ce qu'il est.
+     */
+    const declares = new Set<string>();
+    for (const { sql } of migrations()) {
+      for (const m of sql.matchAll(/create type (?:public\.)?([a-z_]+) as enum/gi)) {
+        declares.add(m[1]);
+      }
+    }
+    expect(declares.size, 'aucun enum lu dans les migrations').toBeGreaterThan(0);
+
+    /*
+     * Un type retiré depuis n'a pas à figurer au contrat. `user_role` a existé
+     * jusqu'à 0009, qui l'a remplacé par `user_post` PUIS supprimé — le laisser
+     * exiger une liste côté client demanderait de maintenir un vocabulaire que
+     * la base ne connaît plus. On lit les suppressions plutôt que d'entretenir
+     * une liste d'exceptions qui, elle, dériverait.
+     */
+    for (const { sql } of migrations()) {
+      for (const m of sql.matchAll(/drop type (?:if exists )?(?:public\.)?([a-z_]+)/gi)) {
+        declares.delete(m[1]);
+      }
+    }
+
+    const couverts = new Set([...PARTAGES.map(([t]) => t), ...SERVEUR_SEUL]);
+    const orphelins = [...declares].filter((t) => !couverts.has(t)).sort();
+
+    expect(
+      orphelins,
+      "Enum(s) sans contrat. Ajoutez chacun à PARTAGES avec sa liste côté "
+        + "client, ou à SERVEUR_SEUL si l'interface ne le connaît vraiment pas.",
+    ).toEqual([]);
   });
 });

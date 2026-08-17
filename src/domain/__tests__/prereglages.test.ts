@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES, POSTS, POST_PRESET } from '../capabilities';
+import { OPERATING_MODES } from '../operating-mode';
+import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL } from '../variance';
+import { ITEM_KIND_LABEL, MOVEMENT_TYPES } from '../types';
 
 /**
  * Le client et le serveur disent-ils la même chose ?
@@ -100,20 +103,32 @@ describe('Les préréglages du serveur suivent ceux du client', () => {
 });
 
 describe("L'enum SQL des capacités suit celui du client", () => {
-  /** L'enum tel que les migrations le construisent : création puis ajouts. */
+  /**
+   * L'enum tel que les migrations le construisent : création puis ajouts.
+   *
+   * Le schéma est optionnel dans le motif, et ce n'est pas de la complaisance :
+   * 0001 écrit `create type item_kind`, les migrations récentes écrivent
+   * `create type public.capability`. Exiger `public.` faisait rendre une liste
+   * VIDE pour la moitié des enums — un test qui ne compare rien tout en
+   * paraissant vert.
+   */
   function enumSql(type: string): string[] {
     const valeurs: string[] = [];
     for (const { sql } of migrations()) {
-      const creation = new RegExp(`create type public\\.${type} as enum\\s*\\(([^)]*)\\)`, 'i')
-        .exec(sql);
+      const creation = new RegExp(
+        `create type (?:public\\.)?${type} as enum\\s*\\(([^)]*)\\)`, 'i',
+      ).exec(sql);
       if (creation) {
         for (const m of creation[1].matchAll(/'([A-Z_]+)'/g)) valeurs.push(m[1]);
       }
       const ajouts = sql.matchAll(
-        new RegExp(`alter type public\\.${type} add value[^']*'([A-Z_]+)'`, 'gi'),
+        new RegExp(`alter type (?:public\\.)?${type} add value[^']*'([A-Z_]+)'`, 'gi'),
       );
       for (const m of ajouts) if (!valeurs.includes(m[1])) valeurs.push(m[1]);
     }
+    // Un enum introuvable rendrait `[]`, et `[]` comparé à `[]` serait vert
+    // sans rien prouver. On refuse le silence plutôt que de s'y fier.
+    expect(valeurs.length, `aucune valeur lue pour l'enum ${type}`).toBeGreaterThan(0);
     return valeurs;
   }
 
@@ -126,5 +141,29 @@ describe("L'enum SQL des capacités suit celui du client", () => {
 
   it('connaît exactement les postes de POSTS', () => {
     expect(enumSql('user_post').sort()).toEqual([...POSTS].sort());
+  });
+
+  /*
+   * Les autres enums partagés. `capability` a dérivé deux fois parce que rien
+   * ne les comparait ; il n'y a aucune raison de croire qu'elle était la seule
+   * exposée. Chaque ligne ci-dessous est un contrat client/serveur de plus qui
+   * cesse de reposer sur la vigilance.
+   *
+   * Absent volontairement : `unit_code`, dont les valeurs sont en minuscules
+   * (kg, mL, sachet) et ne passent pas le lexer ci-dessus — et `sync_status`,
+   * `severity`, `sale_status`, `purchase_order_status`, dont le client ne tient
+   * pas de liste à l'exécution. Les ajouter demanderait d'exporter un tableau
+   * là où il n'existe qu'un type : à faire le jour où l'un d'eux bouge.
+   */
+  const PARTAGES: [string, readonly string[]][] = [
+    ['operating_mode', OPERATING_MODES],
+    ['variance_source', Object.keys(VARIANCE_SOURCE_LABEL)],
+    ['variance_resolution', Object.keys(RESOLUTION_LABEL)],
+    ['item_kind', Object.keys(ITEM_KIND_LABEL)],
+    ['movement_type', MOVEMENT_TYPES],
+  ];
+
+  it.each(PARTAGES)('dit la même chose que le client pour %s', (type, cote) => {
+    expect(enumSql(type).sort()).toEqual([...cote].sort());
   });
 });

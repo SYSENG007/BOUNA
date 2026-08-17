@@ -109,6 +109,24 @@ from pg_policies
 where schemaname = 'public' and tablename = 'variances' and cmd = 'UPDATE';
 
 \echo
+\echo '=== 9. Le déclencheur d''inscription suit l''enum des capacités ========='
+\echo 'Les préréglages de `handle_new_user` sont écrits en dur et datent de'
+\echo '0009. Une capacité née plus tard n''y entre pas toute seule : le compte'
+\echo 'neuf voit l''écran (le client la lui donne) et le serveur la refuse.'
+\echo 'Zéro ligne attendue. `REOPEN_DAY` est réservée au propriétaire, qui'
+\echo 'reçoit `enum_range` en entier — elle n''a donc pas à figurer nommément.'
+
+select label::text as capacite_absente_du_declencheur, 'ÉCHEC' as verdict
+from unnest(enum_range(null::public.capability)) as label
+where label::text <> 'REOPEN_DAY'
+  and position(label::text in (
+        select pg_get_functiondef(p.oid)
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'handle_new_user'
+      )) = 0
+order by 1;
+
+\echo
 \echo '=== RESTE À FAIRE À LA MAIN : le refus effectif ========================'
 \echo 'Les vérifications ci-dessus prouvent la forme, pas le comportement.'
 \echo 'Avec deux comptes réels, l''un SANS la capacité RECEIVE_GOODS :'

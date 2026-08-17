@@ -23,7 +23,7 @@ import { BunaLogo } from '../../../design-system/components/BunaLogo';
  */
 export function Profil() {
   const {
-    user, state, logout, pending, online, lastSyncAt, syncNow, can, outboxDurable,
+    user, state, logout, pending, awaitingElsewhere, online, lastSyncAt, syncNow, can, outboxDurable,
     operatingMode, setOperatingMode,
   } = useBuna();
   const navigate = useNavigate();
@@ -174,6 +174,18 @@ export function Profil() {
               Cet appareil n'arrive plus à mettre vos opérations de côté. Synchronisez maintenant,
               tant que le réseau est là — et évitez d'encaisser hors ligne jusqu'à ce que ce message
               disparaisse.
+            </p>
+          )}
+
+          {/* Une file qui ne bouge plus sans le dire est un piège. Ces
+              opérations-là ne partiront jamais sous la session ouverte : elles
+              ont été saisies dans une autre maison — la simulation, ou la vraie
+              — et un fait daté n'en change pas parce qu'on a changé de compte. */}
+          {awaitingElsewhere > 0 && (
+            <p className="text-[12px] leading-relaxed text-ink-600">
+              {awaitingElsewhere === 1
+                ? "1 opération a été saisie avec un autre compte que celui-ci. Elle partira quand vous rouvrirez la session sous laquelle elle a été faite."
+                : `${awaitingElsewhere} opérations ont été saisies avec un autre compte que celui-ci. Elles partiront quand vous rouvrirez la session sous laquelle elles ont été faites.`}
             </p>
           )}
         </Card>

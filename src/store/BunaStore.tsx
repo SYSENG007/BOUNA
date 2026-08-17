@@ -30,7 +30,7 @@ import { consumedBy } from '../domain/production';
 function convertible(from: Unit, to: Unit | undefined): to is Unit {
   return to !== undefined && canConvert(from, to);
 }
-import { dueEvents, pendingEvents, selectTransport } from './outbox';
+import { awaitingAnotherOrg, dueEvents, ofOrg, pendingEvents, selectTransport } from './outbox';
 import { isBackendConfigured } from '../backend/supabase';
 import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
 import { supabaseTransport } from '../backend/transport';
@@ -373,6 +373,14 @@ interface Ctx {
   stock: Map<string, number>;
   online: boolean;
   pending: number;
+  /**
+   * Ce qui attend une AUTRE organisation que celle ouverte — typiquement des
+   * opérations de simulation quand on est revenu sur la maison réelle, ou
+   * l'inverse. Ces événements ne partiront pas tant qu'on n'aura pas rouvert
+   * la session sous laquelle ils ont été saisis. Compté à part et affiché,
+   * parce qu'une file qui ne bouge plus sans le dire est un piège.
+   */
+  awaitingElsewhere: number;
   syncing: boolean;
   lastSyncAt: string | null;
   /** Ce que l'utilisateur courant a le droit de faire. Revalidé par RLS. */
@@ -681,7 +689,21 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       .finally(() => { if (!cancelled) setAuthLoading(false); });
     return () => { cancelled = true; };
   }, []);
-  const pending = pendingEvents(state.events).length;
+  /*
+   * La file, réduite à l'organisation ouverte.
+   *
+   * `pending` commande deux choses : l'envoi, et le blocage de l'hydratation
+   * (on ne remplace pas l'état local tant qu'il reste des faits non partis).
+   * Compter les événements d'une AUTRE organisation dans ce chiffre bloquerait
+   * l'hydratation pour toujours — ils ne peuvent pas partir sous cette
+   * session, donc le compteur ne redescendrait jamais.
+   */
+  const mine = useMemo(() => ofOrg(state.events, orgId), [state.events, orgId]);
+  const pending = pendingEvents(mine).length;
+  const awaitingElsewhere = useMemo(
+    () => awaitingAnotherOrg(state.events, orgId),
+    [state.events, orgId],
+  );
 
   const stockOf = useCallback(
     (rawItemId: UUID, rawLocationId?: UUID) => {
@@ -1914,7 +1936,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     // timer) peuvent tomber dans le même tour de rendu, avant que `syncing` ne
     // soit repeint — et enverraient alors la même vente deux fois.
     if (syncingRef.current || !navigator.onLine) return;
-    const queue = dueEvents(state.events, lastAttemptAt.current);
+    const queue = dueEvents(ofOrg(state.events, orgId), lastAttemptAt.current);
     if (!queue.length) return;
 
     syncingRef.current = true;
@@ -1946,7 +1968,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [state.events]);
+  }, [state.events, orgId]);
 
   /* ---------------------------------------------------- Hydratation */
 
@@ -2032,7 +2054,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   }, [syncNow]);
 
   const value: Ctx = {
-    state, user, users: USERS, items: itemsMap, stock, online, pending, syncing, lastSyncAt,
+    state, user, users: USERS, items: itemsMap, stock, online, pending, awaitingElsewhere, syncing, lastSyncAt,
     can, grants: state.grants, variances: state.variances,
     grantCapabilities, revokeCapabilities, resolveVariance,
     login: (userId) => dispatch({ type: 'LOGIN', userId }),

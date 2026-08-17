@@ -102,5 +102,12 @@ npm run typecheck && npm run test && npm run build
 Les tests d'acceptation dérivent du §107 du PRD. Une règle du PRD qui n'a pas de
 test n'est pas tenue pour acquise.
 
+Pour éprouver un cycle complet contre le vrai serveur sans toucher aux chiffres
+de la maison : `scripts/simulation.sh start`, puis `docs/SIMULATION.md`. Le bac
+à sable est une SECONDE ORGANISATION, pas un mode de l'application — RLS tient
+l'étanchéité, et la purge tient en un `delete` qui cascade. Ne jamais y
+substituer un drapeau `is_simulation` sur les lignes : ce serait le même défaut
+que le `if (mode === ...)` semé dans les écrans.
+
 Vérifier plutôt que supposer : un cache PostgREST périmé, un `revoke` sans effet
 ou une vue `SECURITY DEFINER` se voient uniquement en interrogeant la base.

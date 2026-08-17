@@ -7,6 +7,7 @@ import { BunaLockup, BunaLogo } from '../design-system/components/BunaLogo';
 import { SyncIndicator } from '../design-system/components/SyncIndicator';
 import { IconChevronLeft, IconChevronRight } from '../design-system/icons';
 import { POST_LABEL } from '../domain/capabilities';
+import { SIMULATION_NOTICE, isSimulation } from '../domain/simulation';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Login } from './Login';
 import { OperationSheet } from './OperationSheet';
@@ -211,6 +212,7 @@ export function AppShell() {
       )}
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+        {isSimulation(user.organizationId) && <SimulationBanner />}
         <div
           className="shell-canvas flex flex-1 flex-col"
           style={isMobile && !immersive ? { paddingBottom: 'var(--tabbar-h)' } : undefined}
@@ -248,6 +250,38 @@ export function AppShell() {
 
       <OperationSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
       <NavigationSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
+    </div>
+  );
+}
+
+/**
+ * Le bandeau de simulation.
+ *
+ * Il est rendu AVANT la toile et en dehors de la limite d'erreur, donc il
+ * survit à un écran qui tombe, et il ne disparaît pas sur les écrans en plein
+ * flux — encaissement compris. C'est voulu : le seul moment où confondre une
+ * journée d'essai avec une vraie journée coûte quelque chose, c'est celui où
+ * l'on encaisse.
+ *
+ * Il ne porte pas le filet doré `.derived` : ce filet marque ce que le système
+ * DÉDUIT, et ceci n'est pas une déduction — c'est l'état de la maison dans
+ * laquelle on travaille.
+ */
+function SimulationBanner() {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2.5 border-b border-info/25 bg-info-pale px-4 py-2 text-info-deep"
+    >
+      <span
+        aria-hidden
+        className="inline-block size-1.5 shrink-0 rounded-full bg-info"
+      />
+      <p className="text-[12.5px] leading-snug">
+        <span className="font-semibold">{SIMULATION_NOTICE.title}</span>
+        <span className="mx-1.5 opacity-40">·</span>
+        {SIMULATION_NOTICE.body}
+      </p>
     </div>
   );
 }

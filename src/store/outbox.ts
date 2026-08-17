@@ -29,6 +29,31 @@ export interface TransportOutcome {
 
 export type Transport = (events: DomainEvent[]) => Promise<TransportOutcome>;
 
+/**
+ * Les événements qui appartiennent à une organisation donnée.
+ *
+ * Un événement porte l'organisation dans laquelle il a été saisi. Sur un
+ * appareil qui a servi à deux maisons — le bac à sable de simulation et la
+ * vraie —, la file peut contenir les deux, et les envoyer sans regarder
+ * enverrait la vente de simulation à la maison réelle : la session ouverte
+ * décide de la destination, pas l'événement.
+ *
+ * On filtre donc à la source. Ce qui n'est pas de l'organisation courante
+ * n'est pas perdu : il reste en attente jusqu'à ce qu'on se reconnecte avec
+ * le compte sous lequel il a été saisi. Un fait daté attend son organisation ;
+ * il ne change pas de maison parce qu'on a changé de compte.
+ */
+export function ofOrg(events: DomainEvent[], organizationId: UUID | null): DomainEvent[] {
+  if (!organizationId) return [];
+  return events.filter((e) => e.organizationId === organizationId);
+}
+
+/** Ce qui attend une AUTRE organisation — à dire, jamais à taire. */
+export function awaitingAnotherOrg(events: DomainEvent[], organizationId: UUID | null): number {
+  if (!organizationId) return 0;
+  return pendingEvents(events).filter((e) => e.organizationId !== organizationId).length;
+}
+
 /** Statuts qui appellent un nouvel envoi. CONFLICT et SYNCED n'en font pas partie. */
 export const PENDING: SyncStatus[] = ['LOCAL_ONLY', 'QUEUED', 'FAILED'];
 

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useBuna, LOCATIONS } from '../../../store/BunaStore';
+import clsx from 'clsx';
+import { useBuna, LOCATIONS, RECIPES, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
 import { replenishmentNeed, stockHealth } from '../../../domain/stock';
+import { consumptionVariance } from '../../../domain/production';
 import type { ItemKind } from '../../../domain/types';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
 import { StockRow } from '../../../design-system/components/patterns';
@@ -25,7 +27,7 @@ const FILTERS: { value: Filter; label: string }[] = [
  * sur l'écran, pas dans un rapport. »
  */
 export function Stock() {
-  const { state, stockOf, can } = useBuna();
+  const { state, items, stockOf, can } = useBuna();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [locationFilter, setLocationFilter] = useState<string>('ALL');
@@ -68,17 +70,42 @@ export function Stock() {
       });
   }, [state.items, filter, query, stockOf, locationFilter]);
 
-  /* §66 — théorique vs réel sur le lait, calculé depuis les ventes du jour. */
-  const milkVariance = useMemo(() => {
-    const soldUnits = state.sales
-      .filter((s) => s.status === 'COMPLETED')
-      .reduce((sum, s) => sum + s.lines.reduce((n, l) => n + l.quantity, 0), 0);
-    const theoretical = (soldUnits * 150) / 1000; // 150 mL par produit
-    const actual = state.movements
-      .filter((m) => m.itemId === 'it-lait' && m.movementType === 'PRODUCTION_CONSUMPTION')
-      .reduce((sum, m) => sum + Math.abs(m.quantity) / (m.unit === 'mL' ? 1000 : 1), 0);
-    return { theoretical, actual, delta: actual - theoretical, soldUnits };
-  }, [state.sales, state.movements]);
+  /*
+   * §66 — théorique vs réel, déduit des recettes enregistrées.
+   *
+   * Cet écart se lisait sur un article nommé en dur (`it-lait`) et sur une dose
+   * supposée de 150 mL par produit vendu, la même pour toutes les boissons. Sur
+   * un vrai catalogue l'article n'existe pas : le réel restait à zéro et le
+   * théorique décrivait une recette imaginaire. On ne montre plus que ce que
+   * les recettes disent réellement, ingrédient par ingrédient.
+   */
+  const consumption = useMemo(() => {
+    const soldByItem = new Map<string, number>();
+    for (const sale of state.sales) {
+      if (sale.status !== 'COMPLETED') continue;
+      for (const line of sale.lines) {
+        soldByItem.set(line.itemId, (soldByItem.get(line.itemId) ?? 0) + line.quantity);
+      }
+    }
+
+    /* La recette d'un produit fini : celle qui le produit, dans sa version
+       courante — la même lecture que l'écran de préparation. */
+    const ingredientsOf = (finishedItemId: string) => {
+      const recipe = RECIPES.find((r) => r.itemId === finishedItemId);
+      if (!recipe) return undefined;
+      const version =
+        RECIPE_VERSIONS.find((v) => v.id === recipe.currentVersionId)
+        ?? RECIPE_VERSIONS.find((v) => v.recipeId === recipe.id);
+      return version?.ingredients;
+    };
+
+    return consumptionVariance(
+      soldByItem,
+      state.movements,
+      ingredientsOf,
+      (id) => items.get(id),
+    );
+  }, [state.sales, state.movements, items]);
 
   /*
    * Le pont vers l'approvisionnement.
@@ -163,35 +190,58 @@ export function Stock() {
           </Card>
         )}
 
-        {milkVariance.soldUnits > 0 && (
+        {consumption.length > 0 && (
           <>
-            <SectionLabel>Théorique vs réel — lait</SectionLabel>
-            <Card className="space-y-3">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <div className="num text-[19px] text-ink-900">{milkVariance.theoretical.toFixed(1)} L</div>
-                  <div className="text-[11px] text-ink-500">Théorique</div>
+            <SectionLabel>Théorique vs réel</SectionLabel>
+            {/* Les trois plus gros écarts : au-delà, la liste cesse d'être lue. */}
+            {consumption.slice(0, 3).map((row) => (
+              <Card key={row.itemId} className="space-y-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[15px] font-medium text-ink-900">{row.name}</span>
+                  <span className="num text-[11px] text-ink-500">
+                    sur {row.soldUnits} vendu{row.soldUnits > 1 ? 's' : ''}
+                  </span>
                 </div>
-                <div>
-                  <div className="num text-[19px] text-ink-900">{milkVariance.actual.toFixed(1)} L</div>
-                  <div className="text-[11px] text-ink-500">Réel</div>
-                </div>
-                <div>
-                  <div className="num text-[19px] text-critique">
-                    {milkVariance.delta >= 0 ? '−' : '+'}{Math.abs(milkVariance.delta).toFixed(1)} L
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    {/* Le théorique est déduit d'une recette : filet doré. */}
+                    <div className="derived num text-[19px] text-ink-900">
+                      {formatQty(row.theoretical, row.unit)}
+                    </div>
+                    <div className="text-[11px] text-ink-500">Théorique</div>
                   </div>
-                  <div className="text-[11px] text-ink-500">Écart</div>
+                  <div>
+                    <div className="num text-[19px] text-ink-900">{formatQty(row.actual, row.unit)}</div>
+                    <div className="text-[11px] text-ink-500">Réel</div>
+                  </div>
+                  <div>
+                    <div
+                      className={clsx(
+                        'num text-[19px]',
+                        Math.abs(row.delta) < 0.001 ? 'text-conforme' : 'text-critique',
+                      )}
+                    >
+                      {row.delta > 0 ? '+' : row.delta < 0 ? '−' : ''}
+                      {formatQty(Math.abs(row.delta), row.unit)}
+                    </div>
+                    <div className="text-[11px] text-ink-500">Écart</div>
+                  </div>
                 </div>
-              </div>
-              <p className="text-[12px] leading-relaxed text-ink-500">
-                Sur {milkVariance.soldUnits} ventes. Un écart s'affiche avec sa cause possible : lancez un
-                inventaire ou déclarez un gaspillage.
-              </p>
-              <div className="flex gap-2.5">
-                <Button className="flex-1" onClick={() => navigate('/stock/perte')}>Déclarer une perte</Button>
-                <Button className="flex-1" onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
-              </div>
-            </Card>
+                <p className="text-[12px] leading-relaxed text-ink-500">
+                  {row.delta > 0
+                    ? 'Il est sorti plus que ce que la recette prévoit : perte, surdosage ou comptage à revoir.'
+                    : row.delta < 0
+                      ? "Il est sorti moins que prévu : une production n'a peut-être pas été déclarée."
+                      : 'La sortie correspond exactement à la recette.'}
+                </p>
+                {Math.abs(row.delta) >= 0.001 && (
+                  <div className="flex gap-2.5">
+                    <Button className="flex-1" onClick={() => navigate('/stock/perte')}>Déclarer une perte</Button>
+                    <Button className="flex-1" onClick={() => navigate('/stock/inventaire')}>Inventaire</Button>
+                  </div>
+                )}
+              </Card>
+            ))}
           </>
         )}
       </main>

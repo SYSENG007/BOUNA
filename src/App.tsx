@@ -36,6 +36,7 @@ import { Equipe } from './features/pilotage/screens/Equipe';
 import { Journal } from './features/pilotage/screens/Journal';
 import { CatalogManager } from './features/pilotage/screens/CatalogManager';
 import { LocationManager } from './features/pilotage/screens/LocationManager';
+import { Reglages } from './features/pilotage/screens/Reglages';
 import { Catalogue } from './features/pilotage/screens/Catalogue';
 import { Alertes } from './features/pilotage/screens/Alertes';
 import { Profil } from './features/pilotage/screens/Profil';
@@ -112,6 +113,7 @@ export default function App() {
               <Route path="/pilotage/journal" element={guard(['VIEW_AUDIT_LOG'], <Journal />)} />
               <Route path="/pilotage/catalogue" element={guard(['MANAGE_CATALOG'], <CatalogManager />)} />
               <Route path="/pilotage/emplacements" element={guard(['MANAGE_LOCATIONS'], <LocationManager />)} />
+              <Route path="/pilotage/reglages" element={guard(['MANAGE_SETTINGS'], <Reglages />)} />
 
               <Route path="/catalogue" element={guard(['VIEW_STOCK'], <Catalogue />)} />
               <Route path="/alertes" element={<Alertes />} />

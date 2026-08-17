@@ -108,11 +108,14 @@ export const DEFAULT_CLOSING_POLICY: ClosingPolicy = {
 /* ----------------------------------------------------------- Intentions */
 
 /**
- * Types d'événements que la clôture ajoute au vocabulaire du §55.
- * `EVENT_TYPES` (types.ts) ne les connaît pas encore — voir le handoff.
+ * Types d'événements propres à la clôture.
+ *
+ * `EVENT_TYPES` les connaît désormais (types.ts) : `ClosingEventType` n'est
+ * plus qu'un alias d'`EventType`, gardé parce qu'il nomme l'intention là où il
+ * est employé. La liste reste, elle sert à dire lesquels sont les nôtres.
  */
 export const CLOSING_EVENT_TYPES = ['SALES_RECONCILED', 'DAY_CLOSED', 'DAY_REOPENED'] as const;
-export type ClosingEventType = EventType | (typeof CLOSING_EVENT_TYPES)[number];
+export type ClosingEventType = EventType;
 
 /**
  * Une intention d'événement : le domaine décrit le fait, le store l'habille

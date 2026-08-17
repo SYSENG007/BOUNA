@@ -29,3 +29,16 @@ export function batchCode(date: Date, sequence: number): string {
   const d = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   return `B-${d}-${String(sequence).padStart(2, '0')}`;
 }
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * La base attend des `uuid`, pas des identifiants lisibles.
+ *
+ * Les recettes se donnaient des clés préfixées — `r-<uuid>`, `rv-<uuid>` —
+ * lisibles au débogage mais refusées par PostgreSQL en `22P02` : tant que les
+ * recettes ne quittaient pas l'appareil, personne ne s'en apercevait.
+ */
+export function isUuid(value: string): boolean {
+  return UUID_SHAPE.test(value);
+}

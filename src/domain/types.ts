@@ -57,12 +57,31 @@ export const ITEM_KIND_LABEL: Record<ItemKind, string> = {
   INTERMEDIATE: 'Préparation',
   FINISHED: 'Produit fini',
 };
+/**
+ * Les unités que la base connaît — le type `unit_code` en PostgreSQL. Tout ce
+ * qui est enregistré s'exprime dans l'une d'elles, sans exception.
+ */
 export type Unit = 'kg' | 'g' | 'L' | 'mL' | 'unite' | 'sachet' | 'bouteille' | 'paquet' | 'carton';
 
+/**
+ * Les unités qu'on accepte à la SAISIE, jamais à l'enregistrement.
+ *
+ * On achète au kilo et on dose au milligramme : obliger à écrire « 0,0015 kg »
+ * là où le carnet dit « 1,5 g » est une invitation à se tromper de virgule.
+ * Le milligramme n'existe donc qu'à l'écran — la quantité est convertie dans
+ * l'unité de l'article avant d'être stockée, et la base n'apprend rien de
+ * nouveau. C'est le type qui le garantit : un `RecipeIngredient.unit` est un
+ * `Unit`, pas un `DosingUnit`, donc « mg » ne peut pas y entrer.
+ */
+export type DosingUnit = Unit | 'mg';
+
 /** Facteurs vers l'unité de base de la famille (g, mL, unité). */
-export const UNIT_BASE: Record<Unit, { base: 'g' | 'mL' | 'unite'; factor: number }> = {
+export const UNIT_BASE: Record<DosingUnit, { base: 'g' | 'mL' | 'unite'; factor: number }> = {
   kg: { base: 'g', factor: 1000 },
   g: { base: 'g', factor: 1 },
+  /* Une recette se dose au gramme près, parfois moins : un arôme se compte en
+     milligrammes là où l'achat se fait au kilo. */
+  mg: { base: 'g', factor: 0.001 },
   L: { base: 'mL', factor: 1000 },
   mL: { base: 'mL', factor: 1 },
   unite: { base: 'unite', factor: 1 },
@@ -73,8 +92,8 @@ export const UNIT_BASE: Record<Unit, { base: 'g' | 'mL' | 'unite'; factor: numbe
 };
 
 /** Libellés d'unité tels qu'on les écrit à l'écran. */
-export const UNIT_LABEL: Record<Unit, string> = {
-  kg: 'kg', g: 'g', L: 'L', mL: 'mL', unite: 'unité',
+export const UNIT_LABEL: Record<DosingUnit, string> = {
+  kg: 'kg', g: 'g', mg: 'mg', L: 'L', mL: 'mL', unite: 'unité',
   sachet: 'sachet', bouteille: 'bouteille', paquet: 'paquet', carton: 'carton',
 };
 
@@ -186,6 +205,36 @@ export const EVENT_TYPES = [
   'CASH_SESSION_CLOSED',
   'CAPABILITY_GRANTED',
   'CAPABILITY_REVOKED',
+  /*
+   * Le catalogue est de la donnée de référence, pas un flux de faits : on
+   * envoie la fiche telle qu'elle doit être, et le dernier qui écrit gagne.
+   * C'est assumé — un prix n'a pas d'historique à rejouer comme un stock.
+   * Mais il passe par la file, comme tout le reste : hors ligne, la
+   * modification attend le réseau au lieu d'être perdue.
+   */
+  'CATALOG_ITEM_SAVED',
+  /* Même raison pour la recette : une donnée de référence, envoyée telle
+     qu'elle doit être. Sans cet événement elle ne quittait pas l'appareil. */
+  'RECIPE_SAVED',
+  /*
+   * Le régime d'exploitation — suivi simple ou suivi précis.
+   *
+   * C'est un fait daté, pas une case cochée : « le 17 août, Aboubacry est
+   * passé au suivi précis » doit rester lisible dans le journal, parce qu'une
+   * analyse de période doit pouvoir dire par quelle méthode elle a été
+   * calculée, et signaler que la méthode a changé en cours de route.
+   */
+  'OPERATING_MODE_SET',
+  /*
+   * La clôture de journée. `closing.ts` les déclarait de son côté
+   * (`CLOSING_EVENT_TYPES`) faute d'être branché à quoi que ce soit ; ils
+   * entrent ici maintenant qu'un écran les produit. Aucun n'a de fonction
+   * serveur dédiée : ils sont journalisés tels quels dans `domain_events`, ce
+   * qui est correct pour un fait qui n'a pas de projection à recalculer.
+   */
+  'SALES_RECONCILED',
+  'DAY_CLOSED',
+  'DAY_REOPENED',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -259,7 +308,16 @@ export interface ProductionBatch {
   id: UUID;
   code: string;
   itemId: UUID;
-  recipeVersionId: UUID;
+  /**
+   * La recette figée qui a servi, quand il y en avait une.
+   *
+   * `null` est un état légitime, pas une donnée manquante : un établissement
+   * qui ouvre n'a pas encore de recettes exactes, et lui refuser de déclarer
+   * ce qu'il a préparé revient à lui refuser de vendre — sans production, pas
+   * de produit fini ; sans produit fini, pas de vente. Le lot dit alors ce
+   * qu'il a produit sans prétendre dire ce qu'il a consommé.
+   */
+  recipeVersionId: UUID | null;
   preparerId: UUID;
   locationId: UUID;
   plannedQuantity: number;

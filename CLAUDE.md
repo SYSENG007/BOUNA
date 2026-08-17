@@ -21,6 +21,16 @@ connexion réseau**. Chaque fonction transactionnelle PostgreSQL commence par
 vérifier cet identifiant et renvoie la transaction existante s'il a déjà été
 traité. Un retry réseau ne peut pas produire une seconde vente.
 
+**Le régime d'exploitation décide de ce qu'on EXIGE, jamais de ce qu'on
+enregistre.** Suivi simple ou suivi précis : mêmes événements, mêmes mouvements,
+mêmes projections. Ce qui change, c'est ce que l'application réclame avant
+d'accepter une déclaration, et ce qu'elle se permet d'en déduire — d'où une
+bascule réversible à tout moment, sans migration d'historique. Les écrans lisent
+la POLITIQUE (`policyOf`), jamais l'enum : un `if (mode === ...)` semé dans les
+écrans est un bug d'architecture. Conséquence assumée : le serveur ne garde plus
+la méthode — `complete_batch` accepte un lot sans recette. RLS protège les
+données, pas la rigueur comptable.
+
 **RULE-010 — l'app doit fonctionner sans réseau.** Sans `.env.local`, le client
 Supabase est `null` et tout continue sur l'état local. Aucune écriture ne doit
 attendre le réseau. Une vente qui échoue parce que le réseau est absent est un

@@ -2,6 +2,13 @@
 
 ## Fait
 
+**Deux régimes d'exploitation.** Suivi simple — on déclare l'approvisionnement,
+ce qu'on prépare et ce qui reste le soir, le coût matière se lit sur la période —
+et suivi précis, où les recettes déduisent tout. Le régime ne change pas ce qui
+est enregistré, seulement ce que l'application exige et ce qu'elle ose déduire :
+la bascule est réversible sans migration ni recalcul. Voir
+`docs/REGIMES-EXPLOITATION.md`.
+
 **Socle capacités.** Le poste n'autorise plus rien ; la capacité, accordée et
 révocable, décide. 25 capacités, 6 features, un registre unique dont dérivent
 les routes, la navigation, le tiroir d'opérations et l'écran de délégation.
@@ -39,9 +46,12 @@ Puis, dans cet ordre :
    (`scripts/db-backup.sh`), application ensuite (`scripts/db-apply.sh`), preuve
    enfin (`supabase/verify_invariants.sql`). Le DDL étant transactionnel, un
    échec laisse la base intacte.
-2. **Brancher `domain/closing.ts`** — les cinq étapes de la clôture, le
-   verrouillage de journée, la réouverture motivée. 1 341 lignes écrites et
-   testées, importées par aucun écran. Donne enfin une interface à `REOPEN_DAY`.
+2. ~~**Brancher `domain/closing.ts`**~~ — fait le 17 août 2026.
+   `src/features/finance/screens/DayClosing.tsx` rend les cinq étapes ;
+   l'écran de caisse ne tient plus sa logique simplifiée en parallèle. Le
+   comptage des produits finis y devient obligatoire en suivi simple — c'est
+   la contrepartie du régime. Reste à écrire : l'écran de réouverture motivée,
+   donc `REOPEN_DAY` n'a toujours pas de destination.
 3. **Écrans d'approbation d'achat et de fournisseurs** — `approve_purchase_request`
    et `reject_purchase_request` existent et sont gardées ; l'interface manque,
    donc les deux capacités s'accordent sans mener nulle part.
@@ -49,6 +59,11 @@ Puis, dans cet ordre :
    l'inventaire : le préparateur déclare ce qu'il a obtenu, le système révèle
    ensuite l'attendu et l'écart valorisé au coût moyen pondéré. C'est ce qui
    alimentera enfin `VarianceSource = 'YIELD'`.
+5. **Le coût d'un lot**. `complete_batch` n'appelle pas
+   `apply_weighted_average_cost` pour le produit qu'il fabrique : un produit
+   fini se vend donc à coût nul et affiche 100 % de marge, dans les deux
+   régimes. Le suivi simple contourne le problème en mesurant sur la période ;
+   le suivi précis, lui, ne tient pas encore sa promesse.
 5. **Raccourcir les flux** feature par feature.
 6. **Notifications** — moteur de règles côté serveur, cooldown, Web Push.
    Séquencé après l'application des migrations : les règles vivent en base et

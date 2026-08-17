@@ -321,3 +321,30 @@ les arguments de `makeEvent`, `makeMovement` et `makeAudit`.
    double comptage est un sujet de Sprint 7, pas une décision à prendre en douce
    dans un écran de clôture. Le récapitulatif expose les composantes
    (`revenue`, `cogs`, `grossMargin`, `expensesTotal`, les trois écarts).
+
+
+---
+
+## Reprise — 17 août 2026
+
+Le module est branché : `src/features/finance/screens/DayClosing.tsx` rend les
+cinq étapes, `Closing.tsx` ne tient plus sa logique simplifiée en parallèle.
+
+Sur les huit points ouverts ci-dessus :
+
+| # | État |
+| --- | --- |
+| 1 | **Fait.** Les trois types sont dans `EVENT_TYPES` ; `ClosingEventType` est un alias d'`EventType`. |
+| 2 | **Fait.** `State.closing` et `State.closures` existent, persistés, acceptés par `COMMIT`. |
+| 3 | **Reste.** Aucune table `day_closures` côté PostgreSQL : le verrou RULE-009 est **client seul**. Un deuxième appareil peut encore dater un fait d'une journée signée ailleurs. |
+| 4 | Inchangé — `Expense` et `WasteEvent` n'ont toujours pas de `siteId`. |
+| 5 | **Fait.** Le store passe `[state.cashSession]`. |
+| 6 | **Fait.** `REOPEN_DAY` est une capacité, `policy.reopenCapability` la désigne. L'écran de réouverture reste à écrire. |
+| 7 | **Fait.** L'écran passe par `cashCountView`, qui retranche les dépenses réglées en espèces. |
+| 8 | Inchangé, et toujours volontaire. Le suivi simple contourne le double comptage autrement : `materialBalance()` mesure la consommation par la période (stock initial + achats − stock final) au lieu de l'additionner aux dépenses « Matières ». |
+
+**Ajouté au passage :** `domain/coherence.ts`. Le suivi simple ne refuse plus
+rien au comptoir — vendre au-delà de ce qui a été déclaré préparé passe. L'étape
+de validation finale affiche donc ce que la journée a rendu invérifiable :
+constat chiffré, conséquence sur les chiffres, geste proposé. Il ne bloque
+jamais la clôture.

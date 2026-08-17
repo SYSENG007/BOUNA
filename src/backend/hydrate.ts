@@ -1,13 +1,16 @@
 import type {
   AuditEvent, CashSession, DomainEvent, Expense, Item, Notification,
-  ProductionBatch, Purchase,  Sale, Site, StockLocation, StockMovement, Supplier, User, UUID,
+  ProductionBatch, Purchase, Recipe, RecipeVersion, Sale, Site, StockLocation, StockMovement,
+  Supplier, User, UUID,
   WasteEvent,
 } from '../domain/types';
 import type { CapabilityGrant } from '../domain/capabilities';
+import { OPERATING_MODES, type OperatingMode } from '../domain/operating-mode';
 import { supabase } from './supabase';
 import {
   mapAudit, mapBatch, mapCashSession, mapDomainEvent, mapExpense, mapItem, mapLocation,
-  mapMovement, mapNotification, mapProfile, mapPurchase, mapSale, mapSite, mapStockLevel,
+  mapMovement, mapNotification, mapProfile, mapPurchase, mapRecipe, mapRecipeVersion,
+  mapSale, mapSite, mapStockLevel,
   mapSupplier, mapWaste, str, type Row, type StockLevelRow,
 } from './mappers';
 
@@ -52,6 +55,15 @@ export interface Snapshot {
   saleCounter: number;
   /** Ce que le serveur pense du stock. Sert au contrôle, pas à l'affichage. */
   stockLevels: StockLevelRow[];
+  /** Les recettes du serveur — vides tant que personne n'en a enregistré. */
+  recipes: Recipe[];
+  recipeVersions: RecipeVersion[];
+  /**
+   * Le régime d'exploitation du site. `null` quand la base ne le connaît pas
+   * encore — l'appareil garde alors le sien, plutôt que de rebasculer la
+   * maison en silence à chaque hydratation.
+   */
+  operatingMode: OperatingMode | null;
   /** Tables qui n'ont pas répondu. Non vide ≠ échec : RLS filtre légitimement. */
   problems: string[];
 }
@@ -96,6 +108,7 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
   const [
     sites, locations, suppliers, profiles, items, movements, sales, expenses,
     waste, batches, purchases, cashSessions, notifications, audit, events, levels, capabilities,
+    recipeRowsRaw, versionRows,
   ] = await Promise.all([
     fetchRows('sites', () => db.from('sites').select('*').eq('organization_id', orgId)),
     fetchRows('stock_locations', () => db.from('stock_locations').select('*').eq('site_id', siteId)),
@@ -129,6 +142,12 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     // Accords de capacités : sans cette lecture, ce que `grant_capability` écrit
     // en base ne redevient jamais visible sur un autre appareil (§0.2).
     fetchRows('user_capabilities', () => db.from('user_capabilities').select('*').eq('organization_id', orgId)),
+    /* Les recettes : l'en-tête, puis les versions avec leurs ingrédients en
+       jointure. Sans cette lecture, une recette enregistrée sur la tablette
+       n'existait pour aucun autre appareil. */
+    fetchRows('recipes', () => db.from('recipes').select('*').eq('organization_id', orgId).order('name')),
+    fetchRows('recipe_versions', () => db.from('recipe_versions')
+      .select('*, recipe_ingredients(*)').order('version', { ascending: true })),
   ]);
 
   // Sans catalogue ni emplacements, il n'y a pas d'application : on renonce.
@@ -165,6 +184,22 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     revokedAt: r.revoked_at ? str(r.revoked_at) : undefined,
   }));
 
+  /* Les versions d'abord : la recette y lit sa version courante. */
+  const mappedVersions = versionRows.rows.map(mapRecipeVersion);
+
+  /*
+   * Le régime du site, lu sur la ligne brute plutôt que sur `Site` : le
+   * domaine n'a pas à porter un réglage d'exploitation dans son type de site,
+   * qui sert partout ailleurs. Une base sans la colonne rend `undefined` — on
+   * le traduit en `null`, « le serveur ne sait pas », et non en « suivi
+   * simple », qui rebasculerait la maison à chaque hydratation.
+   */
+  const siteRow = sites.rows.find((r) => str(r.id) === siteId) ?? sites.rows[0];
+  const rawMode = siteRow ? str(siteRow.operating_mode) : '';
+  const operatingMode = (OPERATING_MODES as readonly string[]).includes(rawMode)
+    ? (rawMode as OperatingMode)
+    : null;
+
   return {
     organizationId: orgId,
     site: sites.rows.map(mapSite).find((s) => s.id === siteId) ?? sites.rows.map(mapSite)[0] ?? null,
@@ -185,6 +220,9 @@ export async function fetchSnapshot(profile: User): Promise<Snapshot | null> {
     grants: mappedGrants,
     saleCounter: mappedSales.reduce((max, s) => Math.max(max, s.number), 0),
     stockLevels: levels.rows.map(mapStockLevel),
+    recipes: recipeRowsRaw.rows.map((r) => mapRecipe(r, mappedVersions)),
+    recipeVersions: mappedVersions,
+    operatingMode,
     problems,
   };
 }

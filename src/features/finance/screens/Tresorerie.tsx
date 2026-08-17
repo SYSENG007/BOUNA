@@ -164,7 +164,7 @@ export function Tresorerie() {
                 <div className="derived">
                   <div className="text-[13.5px] leading-relaxed text-ink-700">
                     Le réapprovisionnement coûtera environ{' '}
-                    <strong className="num text-ink-900">{fcfaFull(upcoming.total)} FCFA</strong>,
+                    <strong className="num text-ink-900">{fcfaFull(upcoming.total)}</strong>,
                     estimé au coût moyen pondéré.
                   </div>
                   <div className="mt-1">

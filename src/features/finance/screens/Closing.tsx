@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBuna } from '../../../store/BunaStore';
-import { fcfa, fcfaFull } from '../../../domain/money';
+import { fcfa } from '../../../domain/money';
 import { ScreenHeader } from '../../../design-system/components/patterns';
-import { Button, Card, Field } from '../../../design-system/components/primitives';
+import { Button, Card } from '../../../design-system/components/primitives';
+import { DayClosing } from './DayClosing';
+import { businessDateOf } from '../../../domain/closing';
 
 const KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '000', '0', '⌫'];
 
@@ -44,8 +46,27 @@ function useAmount() {
  */
 export function Closing() {
   const { state } = useBuna();
-  const open = !state.cashSession.closedAt;
-  return open ? <CloseShift /> : <OpenShift />;
+  /*
+   * Une clôture commencée tient l'écran jusqu'au bout.
+   *
+   * La première étape ferme le tiroir — c'est son objet. Sans cette condition,
+   * l'écran basculait aussitôt sur « Ouvrez la caisse » et abandonnait la
+   * personne au milieu du gué : quatre étapes restaient à faire, dont le
+   * comptage du stock, et plus aucun chemin n'y menait.
+   */
+  const today = businessDateOf(new Date().toISOString());
+  const closingToday = state.closing?.businessDate === today;
+  const open = !state.cashSession.closedAt || closingToday;
+  /*
+   * Un shift ouvert se ferme par la CLÔTURE, pas par un comptage isolé.
+   *
+   * Cet écran tenait sa propre logique simplifiée — compter le tiroir, écrire
+   * l'écart, terminé — pendant que `domain/closing.ts` portait les cinq
+   * étapes, testées et importées par personne. Deux façons de fermer la même
+   * caisse, c'est une de trop : celle qui restait ne rapprochait pas les
+   * canaux, ne comptait pas le stock, et ne verrouillait pas la journée.
+   */
+  return open ? <DayClosing /> : <OpenShift />;
 }
 
 /* ------------------------------------------------------------- Ouverture */
@@ -95,118 +116,6 @@ function OpenShift() {
         <Button variant="primary" size="counter" full disabled={!raw} onClick={submit}>
           Ouvrir la caisse
         </Button>
-      </main>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------- Clôture */
-
-function CloseShift() {
-  const { state, closeCashSession } = useBuna();
-  const navigate = useNavigate();
-  const { raw, press, value: counted } = useAmount();
-
-  const [revealed, setRevealed] = useState(false);
-  const [reason, setReason] = useState('');
-
-  const expected = useMemo(() => {
-    const cash = state.sales
-      .filter((s) => s.status === 'COMPLETED' && s.paymentMethod === 'CASH')
-      .reduce((sum, s) => sum + s.total, 0);
-    return state.cashSession.openingCash + cash;
-  }, [state.sales, state.cashSession.openingCash]);
-
-  const variance = counted - expected;
-  const needsReason = revealed && Math.abs(variance) > 0;
-
-  const submit = () => {
-    closeCashSession(counted, reason || undefined);
-    navigate('/pilotage', { replace: true });
-  };
-
-  return (
-    <div className="flex min-h-full flex-1 flex-col bg-ivoire">
-      <ScreenHeader
-        title="Comptez la caisse"
-        subtitle={`Clôture · shift #${state.cashSession.shiftNumber}`}
-        onBack={() => navigate(-1)}
-      />
-
-      <main className="flex-1 space-y-4 px-4 pb-32 pt-4">
-        <p className="text-[13px] leading-relaxed text-ink-600">
-          Saisissez l'argent réellement présent. Le montant attendu reste masqué jusqu'à votre saisie.
-        </p>
-
-        <Card className="text-center">
-          <div className="label-section">Espèces comptées</div>
-          <div className="mt-1 flex items-baseline justify-center gap-2">
-            <span className="t-figure text-[40px] leading-none text-ink-900">{raw ? fcfa(counted) : '—'}</span>
-            <span className="text-[13px] text-ink-500">FCFA</span>
-          </div>
-        </Card>
-
-        {!revealed ? (
-          <>
-            <Keypad onPress={press} />
-            <Button variant="primary" size="counter" full disabled={!raw} onClick={() => setRevealed(true)}>
-              Comparer à l'attendu
-            </Button>
-          </>
-        ) : (
-          <>
-            <Card padded={false} className="px-4 py-2">
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-[14px] text-ink-700">Fond d'ouverture</span>
-                <span className="num text-[15px] text-ink-900">{fcfaFull(state.cashSession.openingCash)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-ink-100 py-2.5">
-                <span className="text-[14px] text-ink-700">Attendu</span>
-                <span className="num text-[15px] text-ink-900">{fcfaFull(expected)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-ink-100 py-2.5">
-                <span className="text-[14px] text-ink-700">Compté</span>
-                <span className="num text-[15px] text-ink-900">{fcfaFull(counted)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-ink-100 py-2.5">
-                <span className="text-[14px] font-semibold text-ink-900">Écart</span>
-                <span
-                  className={`num text-[19px] ${variance === 0 ? 'text-conforme-deep' : 'text-critique'}`}
-                >
-                  {variance > 0 ? '+' : ''}{fcfaFull(variance)}
-                </span>
-              </div>
-            </Card>
-
-            {needsReason ? (
-              <>
-                <p className="text-[13px] text-ink-600">
-                  Un motif est requis, puis validation manager.
-                </p>
-                <Field
-                  label="Motif de l'écart"
-                  placeholder="ex. rendu de monnaie"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </>
-            ) : (
-              <p className="text-[13px] text-conforme-deep">Caisse juste. Rien à justifier.</p>
-            )}
-
-            <div className="flex gap-2.5">
-              <Button className="flex-1" onClick={() => setRevealed(false)}>Recompter</Button>
-              <Button
-                variant="primary"
-                className="flex-[1.4]"
-                disabled={needsReason && !reason.trim()}
-                onClick={submit}
-              >
-                {needsReason ? 'Justifier et clôturer' : 'Clôturer la caisse'}
-              </Button>
-            </div>
-          </>
-        )}
       </main>
     </div>
   );

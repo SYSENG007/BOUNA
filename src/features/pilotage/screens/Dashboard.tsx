@@ -7,6 +7,7 @@ import {
   type Granularity,
 } from '../../../domain/analytics';
 import { cashFlowReport, cashPositions } from '../../../domain/cashflow';
+import { materialBalance, productFlows } from '../../../domain/period-balance';
 import { openVariances, unresolvedAmount, VARIANCE_SOURCE_LABEL } from '../../../domain/variance';
 import { EXPENSE_LABEL, type ExpenseCategory } from '../../../domain/types';
 import { useAnalyticsInput, useCashFlowInput } from '../useAnalytics';
@@ -32,7 +33,7 @@ import {
  * partout en ferait de la décoration.
  */
 export function Dashboard() {
-  const { state, user, can, variances } = useBuna();
+  const { state, user, can, variances, policy } = useBuna();
   const navigate = useNavigate();
   const input = useAnalyticsInput();
   const cashInput = useCashFlowInput();
@@ -51,6 +52,46 @@ export function Dashboard() {
     [input, now],
   );
   const margins = useMemo(() => productMargins(input, report.period), [input, report.period]);
+
+  /*
+   * Le coût matière de la période, quand le coût par produit n'existe pas.
+   *
+   * En suivi simple, le COGS figé sur chaque vente vaut zéro : le coût moyen
+   * pondéré d'un produit fini n'est écrit par aucune réception, et la
+   * production ne le calcule pas. « Marge brute 100 % » n'est donc pas une
+   * bonne nouvelle, c'est une soustraction de zéro. On mesure ce qu'on sait
+   * mesurer — ce qui est entré en matières, moins ce qui reste.
+   */
+  const balance = useMemo(
+    () => materialBalance({
+      items: state.items,
+      movements: state.movements,
+      sales: state.sales,
+      purchases: state.purchases,
+      /* `Period` porte des bornes en millisecondes ; le bilan compare des
+         instants ISO, comme les faits eux-mêmes les portent. */
+      window: {
+        from: new Date(report.period.start).toISOString(),
+        to: new Date(report.period.end).toISOString(),
+      },
+    }),
+    [state.items, state.movements, state.sales, state.purchases, report.period],
+  );
+  const marginKnown = policy.productMarginKnown;
+
+  /* L'équation que la déclaration de préparation rend possible, sans recette :
+     préparé + reste de la veille − vendu − jeté = ce qu'il devrait rester. */
+  const flows = useMemo(
+    () => productFlows({
+      items: state.items,
+      movements: state.movements,
+      window: {
+        from: new Date(report.period.start).toISOString(),
+        to: new Date(report.period.end).toISOString(),
+      },
+    }),
+    [state.items, state.movements, report.period],
+  );
   const cash = useMemo(() => cashFlowReport(cashInput, now, 14), [cashInput, now]);
 
   const open = openVariances(variances);
@@ -113,7 +154,16 @@ export function Dashboard() {
             />
             <KpiTile label="Commandes" value={String(totals.orders)}
               caption={totals.averageBasket !== null ? `panier ${fcfa(totals.averageBasket)} FCFA` : undefined} />
-            {seeFinances && (
+            {/*
+              La marge se lit là où elle existe.
+              En suivi précis, elle vient des recettes, vente par vente. En suivi
+              simple, ce COGS vaut zéro — aucune réception n'écrit le coût d'un
+              produit fini, et la production ne le calcule pas — donc « marge
+              100 % » ne dirait pas que tout va bien, mais que la soustraction
+              portait sur rien. On montre alors le coût matière de la période,
+              qui est mesuré et non supposé.
+            */}
+            {seeFinances && marginKnown && (
               <div className="derived">
                 <KpiTile
                   label="Marge brute"
@@ -123,7 +173,7 @@ export function Dashboard() {
                 />
               </div>
             )}
-            {seeFinances && (
+            {seeFinances && marginKnown && (
               <div className="derived">
                 <KpiTile
                   label="Marge nette"
@@ -131,6 +181,31 @@ export function Dashboard() {
                   unit="FCFA"
                   caption={`après ${fcfa(totals.operatingExpenses)} de charges et ${fcfa(totals.wasteCost)} de pertes`}
                   tone={totals.netMargin >= 0 ? 'positive' : 'negative'}
+                />
+              </div>
+            )}
+            {seeFinances && !marginKnown && (
+              <div className="derived">
+                <KpiTile
+                  label="Part matière"
+                  value={balance.materialSharePct !== null ? percent(balance.materialSharePct) : '—'}
+                  caption={`${fcfa(balance.consumed)} FCFA de matières consommées`}
+                  tone={(balance.materialSharePct ?? 0) <= 35 ? 'positive' : 'negative'}
+                />
+              </div>
+            )}
+            {seeFinances && !marginKnown && (
+              <div className="derived">
+                <KpiTile
+                  label="Marge de période"
+                  value={fcfa(balance.grossMargin)}
+                  unit="FCFA"
+                  caption={
+                    balance.uncounted
+                      ? 'stock final théorique — personne n’a compté'
+                      : `stock initial ${fcfa(balance.openingValue)} + achats ${fcfa(balance.purchases)} − reste ${fcfa(balance.closingValue)}`
+                  }
+                  tone={balance.grossMargin >= 0 ? 'positive' : 'negative'}
                 />
               </div>
             )}
@@ -145,7 +220,7 @@ export function Dashboard() {
               <Badge tone="surveiller">{open.length} écart{open.length > 1 ? 's' : ''} ouvert{open.length > 1 ? 's' : ''}</Badge>
             </div>
             <p className="text-[13.5px] leading-relaxed text-ink-600">
-              <strong className="num text-ink-900">{fcfaFull(openAmount)} FCFA</strong> attendent un motif.
+              <strong className="num text-ink-900">{fcfaFull(openAmount)}</strong> attendent un motif.
               Tant qu'ils n'en ont pas, on ne sait pas si c'est une perte, une erreur ou un vol.
             </p>
             <div className="space-y-2.5">
@@ -269,23 +344,68 @@ export function Dashboard() {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <section>
             <SectionLabel className="mb-2">Ce qui rapporte</SectionLabel>
-            <Card className={seeFinances ? 'derived' : undefined}>
+            <Card className={seeFinances && marginKnown ? 'derived' : undefined}>
               {margins.hasData && margins.value.length > 0 ? (
-                <HBars
-                  rows={margins.value.slice(0, 6).map((m) => ({
-                    label: m.name,
-                    value: seeFinances ? m.grossMargin : m.unitsSold,
-                    tone: m.soldAtLoss ? 'critique' : 'cafe',
-                    right: seeFinances
-                      ? `${fcfa(m.grossMargin)} · ${m.marginPct !== null ? percent(m.marginPct) : '—'}`
-                      : `${m.unitsSold} vendus`,
-                  }))}
-                />
+                <>
+                  <HBars
+                    rows={margins.value.slice(0, 6).map((m) => ({
+                      label: m.name,
+                      value: seeFinances && marginKnown ? m.grossMargin : m.unitsSold,
+                      tone: m.soldAtLoss && marginKnown ? 'critique' : 'cafe',
+                      right: seeFinances && marginKnown
+                        ? `${fcfa(m.grossMargin)} · ${m.marginPct !== null ? percent(m.marginPct) : '—'}`
+                        : `${m.unitsSold} vendus`,
+                    }))}
+                  />
+                  {seeFinances && !marginKnown && (
+                    <p className="mt-3 text-[12.5px] leading-relaxed text-ink-500">
+                      Les quantités, pas la marge : sans recette, ce que coûte une unité reste
+                      inconnu. La rentabilité se lit sur la période, au-dessus.
+                    </p>
+                  )}
+                </>
               ) : (
                 <EmptyChart message="Aucune vente sur la période." />
               )}
             </Card>
           </section>
+
+          {/*
+            Préparé, vendu, restant — l'équation du suivi simple.
+            Elle ne demande aucune recette : elle compare des faits que la
+            maison connaît déjà. L'écart n'accuse personne, il ouvre une
+            question, et il ne veut rien dire tant que personne n'a compté.
+          */}
+          {!marginKnown && flows.length > 0 && (
+            <section>
+              <SectionLabel className="mb-2">Préparé, vendu, restant</SectionLabel>
+              <Card padded={false} className="px-4 py-1">
+                {flows.slice(0, 8).map((f) => (
+                  <div
+                    key={f.itemId}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-ink-100 py-2.5 last:border-0"
+                  >
+                    <span className="text-[14px] text-ink-900">{f.name}</span>
+                    <span className="num text-[12.5px] text-ink-500">
+                      {f.produced > 0 && `préparé ${f.produced} · `}
+                      vendu {f.sold} · reste {f.closing}
+                      {f.counted && f.gap !== 0 && (
+                        <span className={f.gap < 0 ? 'text-critique' : 'text-or-ink'}>
+                          {' '}· écart {f.gap > 0 ? '+' : ''}{f.gap}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </Card>
+              {flows.every((f) => !f.counted) && (
+                <p className="mt-2 px-1 text-[12.5px] leading-relaxed text-ink-500">
+                  Personne n'a compté sur cette période : « reste » est ce que le système déduit,
+                  pas ce qu'il y a sur l'étagère. Le comptage du soir referme l'équation.
+                </p>
+              )}
+            </section>
+          )}
 
           {seeFinances && (
             <section>

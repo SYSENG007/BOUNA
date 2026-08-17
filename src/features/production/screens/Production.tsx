@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useBuna, RECIPE_VERSIONS } from '../../../store/BunaStore';
+import { useBuna, RECIPES, RECIPE_VERSIONS } from '../../../store/BunaStore';
 import { formatQty } from '../../../domain/units';
 import { isMadeToOrder } from '../../../domain/types';
 import { feasibleUnits as feasible } from '../../../domain/production';
@@ -56,9 +56,16 @@ export function Production() {
           const available = stockOf(product.id);
           const target = product.targetStock ?? 0;
           const toProduce = Math.max(0, Math.ceil(target - available));
-          const recipe = RECIPE_VERSIONS.find(
-            (v) => v.recipeId === (product.id === 'it-vanilla' ? 'rc-vanilla' : 'rc-caramel'),
-          );
+          /* La recette se retrouve par l'article qu'elle produit, pas par une
+             table d'identifiants de démonstration écrite à la main : sur de
+             vraies recettes, la correspondance ne tombait jamais et le bouton
+             « Lancer » ne s'affichait pour personne. On préfère la version
+             courante déclarée par la recette. */
+          const known = RECIPES.find((r) => r.itemId === product.id);
+          const recipe = known
+            ? RECIPE_VERSIONS.find((v) => v.id === known.currentVersionId)
+              ?? RECIPE_VERSIONS.find((v) => v.recipeId === known.id)
+            : undefined;
           const done = toProduce === 0;
           const feasible = recipe ? feasibleUnits(recipe.id) : null;
 
@@ -98,23 +105,31 @@ export function Production() {
                 />
               </div>
 
-              {!done && recipe && feasible && (
+              {/*
+                Le bouton ne dépendait que de la recette : sans elle, aucune
+                carte n'en portait, et la production du jour ne menait nulle
+                part. Ce qu'il faut pour préparer, c'est un produit et une
+                quantité — la recette n'ajoute que ce qu'elle sait déduire.
+              */}
+              {!done && (
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[12px] text-ink-500">
-                    {feasible.units >= toProduce
-                      ? `Matières suffisantes (${feasible.units} possibles)`
-                      : `Seulement ${feasible.units} possibles · ${feasible.limitingName} limite`}
+                    {feasible && !feasible.unknown
+                      ? feasible.units >= toProduce
+                        ? `Matières suffisantes (${feasible.units} possibles)`
+                        : `Seulement ${feasible.units} possibles · ${feasible.limitingName} limite`
+                      : 'Sans recette, les matières nécessaires restent inconnues'}
                   </span>
                   <Button
                     variant="primary"
                     size="compact"
                     onClick={() =>
                       navigate('/production/preparation', {
-                        state: { itemId: product.id, planned: toProduce, recipeVersionId: recipe.id },
+                        state: { itemId: product.id, planned: toProduce, recipeVersionId: recipe?.id },
                       })
                     }
                   >
-                    Lancer {Math.min(toProduce, feasible.units) || toProduce}
+                    Lancer {feasible && !feasible.unknown ? Math.min(toProduce, feasible.units) || toProduce : toProduce}
                   </Button>
                 </div>
               )}
@@ -153,7 +168,7 @@ export function Production() {
 
       <div className="safe-b rail-bar z-30 pb-2" style={{ bottom: 'var(--tabbar-h)' }}>
         <Button variant="primary" size="counter" full onClick={() => navigate('/production/preparation')}>
-          Déclarer un batch
+          Déclarer une préparation
         </Button>
       </div>
     </div>

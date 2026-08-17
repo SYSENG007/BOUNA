@@ -11,13 +11,14 @@ import type {
 import { isMadeToOrder } from '../domain/types';
 import { deviceId, uuid, batchCode } from '../domain/ids';
 import type { Capability, CapabilityGrant } from '../domain/capabilities';
-import { CAPABILITY_LABEL, effectiveCapabilities } from '../domain/capabilities';
+import { CAPABILITY_LABEL, backfillGrants, effectiveCapabilities } from '../domain/capabilities';
 import type { Actor } from '../domain/actor';
 import { makeActor } from '../domain/actor';
 import type { Resolution, Variance } from '../domain/variance';
 import { RESOLUTION_LABEL, VARIANCE_SOURCE_LABEL, resolve as resolveVarianceFact } from '../domain/variance';
 import { convert, canConvert } from '../domain/units';
 import { projectStock, sourceLocation, unitMismatches, weightedAverageCost } from '../domain/stock';
+import { consumedBy } from '../domain/production';
 
 /**
  * Vrai si l'article a une unité connue, de la même famille que la ligne.
@@ -34,8 +35,16 @@ import { isBackendConfigured } from '../backend/supabase';
 import { restoreSession, signIn as authSignIn, signOut as authSignOut } from '../backend/auth';
 import { supabaseTransport } from '../backend/transport';
 import { crossCheckStock, fetchSnapshot, type Snapshot } from '../backend/hydrate';
+import { itemRow, recipeRows } from '../backend/mappers';
 import { evaluateRules, type Cooldowns } from '../domain/rules';
-import { businessDateOf } from '../domain/closing';
+import {
+  DEFAULT_OPERATING_MODE, OPERATING_MODE_LABEL, policyOf,
+  type OperatingMode, type OperatingPolicy,
+} from '../domain/operating-mode';
+import {
+  businessDateOf, closingContext, completeStep, revertStep, startClosing,
+  type ClosingContext, type ClosingDeclaration, type ClosingSession, type DayClosure,
+} from '../domain/closing';
 import { loadState, saveState } from './persist';
 import { loadOutbox, mergeOutbox, mirrorOutbox } from './outbox-store';
 import {
@@ -83,6 +92,22 @@ interface State {
    * rupture de stock — demain, la question revient d'elle-même.
    */
   dismissals: Record<string, string>;
+  /**
+   * Comment la maison suit ses coûts — voir `domain/operating-mode.ts`.
+   *
+   * Il vit dans l'état parce qu'il doit être lisible hors ligne, au premier
+   * rendu, par des écrans qui n'attendent pas le réseau (RULE-010). Le serveur
+   * le confirme à l'hydratation ; il ne le dicte pas au démarrage.
+   */
+  operatingMode: OperatingMode;
+  /**
+   * La clôture en cours, s'il y en a une. Elle vit dans l'état parce qu'elle
+   * s'étale sur plusieurs écrans et doit survivre à un rechargement : on ne
+   * recompte pas une caisse parce que le téléphone s'est verrouillé.
+   */
+  closing: ClosingSession | null;
+  /** Les journées signées. RULE-009 s'y appuie pour refuser une saisie datée. */
+  closures: DayClosure[];
 }
 
 export const initialState: State = {
@@ -104,6 +129,9 @@ export const initialState: State = {
   grants: SEED_GRANTS,
   variances: [],
   dismissals: {},
+  operatingMode: DEFAULT_OPERATING_MODE,
+  closing: null,
+  closures: [],
 };
 
 export type Action =
@@ -129,6 +157,9 @@ export type Action =
       bumpSale?: boolean;
       bumpBatch?: boolean;
       variances?: Variance[];
+      operatingMode?: OperatingMode;
+      closing?: ClosingSession | null;
+      closure?: DayClosure;
     }
   | { type: 'SAVE_ITEM'; item: Item }
   | { type: 'SET_SYNC'; ids: UUID[]; status: DomainEvent['syncStatus'] }
@@ -192,6 +223,13 @@ export function reducer(state: State, action: Action): State {
         grants: s.grants,
         saleCounter: s.saleCounter,
         batchCounter: Math.max(state.batchCounter, s.batches.length),
+        /*
+         * Le régime du site, quand le serveur en connaît un. Une base qui n'a
+         * pas encore reçu la migration ne renvoie rien : on garde alors celui
+         * de l'appareil plutôt que de retomber en silence sur le défaut, ce
+         * qui rebasculerait la maison à chaque hydratation.
+         */
+        operatingMode: s.operatingMode ?? state.operatingMode,
       };
     }
 
@@ -246,6 +284,11 @@ export function reducer(state: State, action: Action): State {
         saleCounter: a.bumpSale ? state.saleCounter + 1 : state.saleCounter,
         batchCounter: a.bumpBatch ? state.batchCounter + 1 : state.batchCounter,
         variances: a.variances?.length ? [...a.variances, ...state.variances] : state.variances,
+        operatingMode: a.operatingMode ?? state.operatingMode,
+        closing: a.closing !== undefined ? a.closing : state.closing,
+        closures: a.closure
+          ? [a.closure, ...state.closures.filter((c) => c.id !== a.closure!.id)]
+          : state.closures,
       };
     }
 
@@ -338,6 +381,28 @@ interface Ctx {
   grants: CapabilityGrant[];
   /** Écarts constatés. Ouverts tant que personne ne les a soldés. */
   variances: Variance[];
+  /** Comment la maison suit ses coûts. Les écrans lisent `policy`, pas ceci. */
+  operatingMode: OperatingMode;
+  /**
+   * Ce que le régime décide, écran par écran.
+   *
+   * Les écrans lisent la politique et jamais l'enum : c'est ce qui évite un
+   * `if (mode === ...)` semé dans quinze fichiers qu'on oublie de tester, et
+   * ce qui permettra d'ajouter un troisième régime sans toucher un écran.
+   */
+  policy: OperatingPolicy;
+  /** Bascule le régime. Fait daté, audité, synchronisé. Réservé à MANAGE_SETTINGS. */
+  setOperatingMode: (mode: OperatingMode) => boolean;
+  /** La clôture en cours, ou `null` tant que personne ne l'a ouverte. */
+  closing: ClosingSession | null;
+  /** Le contexte que les vues du domaine attendent — recalculé à la demande. */
+  closingCtx: () => ClosingContext;
+  /** Ouvre la clôture du jour, ou rend celle qui est déjà en cours. */
+  openClosing: () => ClosingSession;
+  /** Franchit une étape. Rend le message d'erreur, ou `null` si c'est passé. */
+  submitClosingStep: (declaration: ClosingDeclaration) => string | null;
+  /** Revient sur une étape franchie. Les suivantes tombent avec elle. */
+  revertClosingStep: (step: ClosingDeclaration['step']) => string | null;
   /** Accorde des capacités à quelqu'un. Réservé à MANAGE_TEAM. */
   grantCapabilities: (userId: UUID, capabilities: Capability[]) => boolean;
   /** Retire des capacités. La ligne reste, sa révocation est datée. */
@@ -365,9 +430,19 @@ interface Ctx {
     amountReceived: number,
   ) => Sale | null;
   voidSale: (saleId: UUID, reason: string) => void;
+  /**
+   * Déclare une préparation faite.
+   *
+   * `recipeVersionId` est facultatif : un établissement qui ouvre n'a pas
+   * encore de recettes justes, et lui refuser de déclarer ce qu'il a préparé
+   * revient à lui refuser de vendre. `consumption` dit ce qui est réellement
+   * sorti pour ce lot — en TOTAL, pas par unité — et l'emporte sur la recette
+   * quand les deux existent : c'est le constat qui fait foi, pas la prévision.
+   */
   completeBatch: (input: {
-    itemId: UUID; recipeVersionId: UUID; planned: number; produced: number;
+    itemId: UUID; recipeVersionId?: UUID | null; planned: number; produced: number;
     loss: number; locationId: UUID;
+    consumption?: { itemId: UUID; quantity: number; unit: Unit }[];
   }) => void;
   recordWaste: (input: { itemId: UUID; locationId: UUID; quantity: number; reason: WasteReason }) => void;
   transferStock: (input: { itemId: UUID; from: UUID; to: UUID; quantity: number }) => void;
@@ -445,7 +520,17 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     const events = saved.events?.map((e) =>
       e.syncStatus === 'SYNCING' ? { ...e, syncStatus: 'QUEUED' as const } : e,
     );
-    return { ...base, ...saved, ...(events ? { events } : {}) };
+    const restored = { ...base, ...saved, ...(events ? { events } : {}) };
+
+    /*
+     * Une capacité née après ce cache n'a été offerte à personne : l'écran
+     * qu'elle garde serait inaccessible à tout le monde, propriétaire compris,
+     * et personne ne pourrait se l'accorder faute de la détenir. On rattrape
+     * depuis le poste, exactement comme à la création d'un compte — jamais une
+     * capacité déjà révoquée, qui reste un fait daté.
+     */
+    const missing = backfillGrants(restored.grants, USERS, new Date().toISOString());
+    return missing.length ? { ...restored, grants: [...restored.grants, ...missing] } : restored;
   });
   const [online, setOnline] = useState(navigator.onLine);
   const [syncing, setSyncing] = useState(false);
@@ -821,10 +906,28 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   );
 
   const completeBatch = useCallback<Ctx['completeBatch']>(
-    ({ itemId: rawItemId, recipeVersionId, planned, produced, loss, locationId: rawLocationId }) => {
+    ({
+      itemId: rawItemId, recipeVersionId, planned, produced, loss,
+      locationId: rawLocationId, consumption: declared,
+    }) => {
       const actor = authorize('PRODUCE');
-      const version = RECIPE_VERSIONS.find((v) => v.id === recipeVersionId);
-      if (!version || !user || !actor) return;
+      /* Une préparation produit une quantité positive — `complete_batch` le
+         refuse aussi. Laisser passer un zéro fabriquerait un événement que la
+         file réessaierait sans fin, sans que rien ne l'explique à l'écran. */
+      if (!user || !actor || produced <= 0) return;
+
+      /*
+       * La recette, s'il y en a une. Elle n'est plus un préalable.
+       *
+       * Sans elle, l'écran refusait de s'ouvrir et cette fonction sortait en
+       * silence : pas de recette, pas de production ; pas de production, pas
+       * de produit fini ; pas de produit fini, pas de vente. Un établissement
+       * qui ouvre n'a pas encore de recettes exactes — l'application ne doit
+       * pas lui demander de les inventer pour avoir le droit de travailler.
+       */
+      const version = recipeVersionId
+        ? RECIPE_VERSIONS.find((v) => v.id === recipeVersionId)
+        : undefined;
 
       // L'écran de production nomme encore le produit en dur : on le traduit.
       const itemId = resolveId(rawItemId);
@@ -832,28 +935,34 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       const id = uuid();
       const code = batchCode(new Date(), state.batchCounter + 1);
 
-      // Consommation déduite de la recette : l'utilisateur déclare 27 unités,
-      // le système sait ce que ça a coûté en lait, café, gobelets.
-      const consumption = version.ingredients.map((ing) =>
+      /* Le constat d'abord, la recette ensuite — la règle et son pourquoi sont
+         dans `consumedBy`, avec les tests qui la tiennent. */
+      const lines = consumedBy(
+        produced,
+        declared?.map((line) => ({ ...line, itemId: resolveId(line.itemId) })),
+        version?.ingredients,
+      );
+
+      const consumption = lines.map((line) =>
         makeMovement(
           /* La cuisine était codée en dur. Le lait est au frigo : la cuisine
              passait en négatif et le frigo restait plein.
              La quantité est convertie dans l'unité de l'ARTICLE avant d'être
              comparée au stock — 3960 mL face à 6,2 L, comparés bruts, ne
              désignent jamais le bon emplacement. */
-          ing.itemId,
+          line.itemId,
           sourceFor(
-            ing.itemId,
+            line.itemId,
             /* Faute d'unité comparable, on interroge le stock dans l'unité du
                mouvement : l'emplacement choisi peut être imparfait, mais une
                conversion impossible ne doit pas faire échouer une production
                déjà faite en cuisine. */
-            convertible(ing.unit, itemsMap.get(ing.itemId)?.unit)
-              ? convert(ing.quantity * produced, ing.unit, itemsMap.get(ing.itemId)!.unit)
-              : ing.quantity * produced,
+            convertible(line.unit, itemsMap.get(line.itemId)?.unit)
+              ? convert(line.quantity, line.unit, itemsMap.get(line.itemId)!.unit)
+              : line.quantity,
             LOC.KITCHEN,
           ),
-          -(ing.quantity * produced), ing.unit,
+          -line.quantity, line.unit,
           'PRODUCTION_CONSUMPTION', 'ProductionBatch', id, actor,
         ),
       );
@@ -862,7 +971,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       );
 
       const batch: ProductionBatch = {
-        id, code, itemId, recipeVersionId, preparerId: user.id, locationId,
+        id, code, itemId, recipeVersionId: version?.id ?? null, preparerId: user.id, locationId,
         plannedQuantity: planned, producedQuantity: produced, lossQuantity: loss,
         startedAt: actor.at, completedAt: actor.at, actor,
       };
@@ -880,10 +989,13 @@ export function BunaProvider({ children }: { children: ReactNode }) {
              sinon `complete_batch` ne peut ni écrire le lot ni sortir les
              ingrédients. */
           makeEvent('BATCH_COMPLETED', 'ProductionBatch', id, {
-            batchId: id, code, itemId, recipeVersionId, locationId,
+            batchId: id, code, itemId, recipeVersionId: version?.id ?? null, locationId,
             planned, produced, loss, yieldPct,
+            /* `locationId` part avec la ligne : la colonne est NOT NULL côté
+               serveur, et une consommation sans emplacement fait échouer
+               l'insertion — donc perd le lot, en boucle. */
             consumption: consumption.map((m) => ({
-              itemId: m.itemId, quantity: m.quantity, unit: m.unit,
+              itemId: m.itemId, quantity: m.quantity, unit: m.unit, locationId: m.locationId,
             })),
           }),
         ],
@@ -1025,10 +1137,36 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     (item) => {
       const actor = authorize('MANAGE_CATALOG');
       if (!actor) return;
-      const isNew = !itemsMap.has(item.id);
+      const previous = itemsMap.get(item.id);
+      const isNew = !previous;
+
+      /*
+       * La modification part dans la file, elle ne reste plus sur l'appareil.
+       *
+       * `items` n'était qu'en lecture : un prix changé vivait dans l'état
+       * local, ne partait jamais, et la première hydratation le remplaçait par
+       * la valeur du serveur. Le prix revenait à l'ancien tout seul, sans rien
+       * dire, et l'écran suivant montrait l'ancien tarif au comptoir.
+       *
+       * Passer par la file règle les deux moitiés du problème : la fiche part
+       * dès que le réseau revient, et tant qu'elle attend, `pending > 0`
+       * empêche l'hydratation d'écraser ce qui n'est pas encore parti.
+       */
+      const row = itemRow(item, orgId);
+      /*
+       * Le coût moyen pondéré n'accompagne la fiche que si quelqu'un l'a
+       * vraiment saisi. C'est une valeur DÉRIVÉE des réceptions : la renvoyer
+       * à chaque enregistrement écraserait un calcul serveur à jour par l'état
+       * qu'avait l'appareil avant la dernière réception.
+       */
+      if (isNew || item.weightedAvgCost !== previous?.weightedAvgCost) {
+        row.weighted_avg_cost = item.weightedAvgCost ?? 0;
+      }
+
       dispatch({ type: 'SAVE_ITEM', item });
       dispatch({
         type: 'COMMIT',
+        events: [makeEvent('CATALOG_ITEM_SAVED', 'Item', item.id, { row })],
         audit: [
           makeAudit(
             actor,
@@ -1039,7 +1177,7 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         ],
       });
     },
-    [itemsMap, authorize, makeAudit],
+    [itemsMap, authorize, makeAudit, makeEvent, orgId],
   );
 
   const saveLocation = useCallback((location: StockLocation) => {
@@ -1052,6 +1190,8 @@ export function BunaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveRecipe = useCallback((recipe: Recipe, version: RecipeVersion) => {
+    const actor = authorize('EDIT_RECIPE');
+    if (!actor) return;
     const rExists = RECIPES.some((r) => r.id === recipe.id);
     const updatedRecipes = rExists
       ? RECIPES.map((r) => (r.id === recipe.id ? recipe : r))
@@ -1072,20 +1212,42 @@ export function BunaProvider({ children }: { children: ReactNode }) {
       recipeVersions: updatedVersions,
     });
     setReferentials(next);
-  }, []);
+
+    /*
+     * La recette part au serveur.
+     *
+     * Elle ne vivait que dans le cache du navigateur : invisible depuis un
+     * autre appareil, et perdue avec le cache. Le carnet de recettes d'une
+     * boutique ne peut pas dépendre de ce que le navigateur décide de garder.
+     */
+    const rows = recipeRows(recipe, version, orgId);
+    dispatch({
+      type: 'COMMIT',
+      events: [makeEvent('RECIPE_SAVED', 'Recipe', recipe.id, rows)],
+      audit: [makeAudit(
+        actor,
+        rExists ? `Recette modifiée — ${recipe.name}` : `Recette créée — ${recipe.name}`,
+        `version ${version.version} · ${version.ingredients.length} ingrédient(s)`,
+      )],
+    });
+  }, [authorize, makeEvent, makeAudit, orgId]);
 
   const archiveItem = useCallback<Ctx['archiveItem']>(
     (itemId) => {
       const actor = authorize('MANAGE_CATALOG');
       const item = itemsMap.get(itemId);
       if (!item || !actor) return;
-      dispatch({ type: 'SAVE_ITEM', item: { ...item, archived: true } });
+      const archived = { ...item, archived: true };
+      /* Archiver est une modification de fiche comme une autre : sans
+         événement, l'article réapparaissait à l'hydratation suivante. */
+      dispatch({ type: 'SAVE_ITEM', item: archived });
       dispatch({
         type: 'COMMIT',
+        events: [makeEvent('CATALOG_ITEM_SAVED', 'Item', item.id, { row: itemRow(archived, orgId) })],
         audit: [makeAudit(actor, `Article archivé — ${item.name}`, 'retiré du catalogue, historique conservé')],
       });
     },
-    [itemsMap, authorize, makeAudit],
+    [itemsMap, authorize, makeAudit, makeEvent, orgId],
   );
 
   const adjustStock = useCallback<Ctx['adjustStock']>(
@@ -1447,6 +1609,228 @@ export function BunaProvider({ children }: { children: ReactNode }) {
 
   /* --------------------------------------------------- Recouvrement */
 
+  /*
+   * Le régime d'exploitation se change comme tout le reste se déclare : par un
+   * fait daté, signé, qui part dans la file. Pas par un booléen écrit quelque
+   * part.
+   *
+   * Cela a une conséquence utile : une analyse de période peut dire par quelle
+   * méthode elle a été calculée, et signaler que la méthode a changé en cours
+   * de route — l'événement porte sa date.
+   */
+  const setOperatingMode = useCallback<Ctx['setOperatingMode']>(
+    (mode) => {
+      const actor = authorize('MANAGE_SETTINGS');
+      if (!actor) return false;
+      /* Rebasculer sur le régime courant n'est pas un fait : ne rien écrire
+         évite un journal plein de changements qui ne changent rien. */
+      if (mode === state.operatingMode) return true;
+
+      dispatch({
+        type: 'COMMIT',
+        operatingMode: mode,
+        events: [makeEvent('OPERATING_MODE_SET', 'Site', siteId, { mode })],
+        audit: [makeAudit(
+          actor,
+          `Suivi des coûts — ${OPERATING_MODE_LABEL[mode].toLowerCase()}`,
+          `depuis « ${OPERATING_MODE_LABEL[state.operatingMode].toLowerCase()} » · s'applique à toute l'équipe`,
+        )],
+      });
+      return true;
+    },
+    [state.operatingMode, siteId, authorize, makeEvent, makeAudit],
+  );
+
+  /* --------------------------------------------------------- Clôture */
+
+  /*
+   * Le périmètre du comptage du soir.
+   *
+   * En suivi simple, ce sont les produits finis qui ferment l'équation
+   * « préparé − vendu − restant ». Sans ce comptage, le régime ne mesure
+   * rien : il ne fait que ne plus bloquer, et le stock négatif que la journée
+   * a laissé reste un mystère permanent.
+   *
+   * On compte là où la marchandise a une existence : chaque emplacement où
+   * l'article a un stock non nul, et à défaut celui où l'on vend — un produit
+   * vendu au-delà du déclaré affiche un négatif, et c'est justement celui-là
+   * qu'il faut compter.
+   */
+  const countScope = useMemo(() => {
+    if (!policyOf(state.operatingMode).countFinishedGoodsAtClosing) return [];
+    const scope: { itemId: UUID; locationId: UUID }[] = [];
+    for (const item of state.items) {
+      if (item.kind !== 'FINISHED' || item.archived || isMadeToOrder(item)) continue;
+      const places = LOCATIONS
+        .map((l) => l.id)
+        .filter((locationId) => Math.abs(stock.get(`${item.id}@${locationId}`) ?? 0) > 0.0001);
+      for (const locationId of places.length ? places : [LOC.POS]) {
+        scope.push({ itemId: item.id, locationId });
+      }
+    }
+    return scope;
+  }, [state.items, state.operatingMode, stock]);
+
+  const closingCtx = useCallback((): ClosingContext => closingContext({
+    siteId,
+    businessDate: businessDateOf(new Date().toISOString()),
+    actor: {
+      id: user?.id ?? '',
+      post: user?.post ?? 'SELLER',
+      capabilities: user?.capabilities ?? [],
+    },
+    items: state.items,
+    sales: state.sales,
+    expenses: state.expenses,
+    movements: state.movements,
+    cashSessions: [state.cashSession],
+    closures: state.closures,
+    pendingEventCount: pendingEvents(state.events).length,
+    countScope,
+  }), [siteId, user, state.items, state.sales, state.expenses, state.movements,
+       state.cashSession, state.closures, state.events, countScope]);
+
+  const openClosing = useCallback<Ctx['openClosing']>(() => {
+    if (state.closing) return state.closing;
+    const session = startClosing(siteId, businessDateOf(new Date().toISOString()));
+    dispatch({ type: 'COMMIT', closing: session });
+    return session;
+  }, [state.closing, siteId]);
+
+  /*
+   * Franchir une étape.
+   *
+   * Le domaine décide et rend les faits à écrire ; le store les commit en une
+   * seule transaction, comme une vente. Un franchissement à moitié écrit —
+   * l'ajustement de stock posé mais la caisse non fermée — serait pire qu'un
+   * refus, parce que rien ne dirait où il s'est arrêté.
+   */
+  const submitClosingStep = useCallback<Ctx['submitClosingStep']>(
+    (declaration) => {
+      const actor = authorize(declaration.step === 'FINAL_VALIDATION' ? 'CLOSE_DAY' : 'MANAGE_CASH_SESSION');
+      if (!actor) return "Vous n'avez pas l'autorisation de clôturer.";
+
+      const session = state.closing ?? startClosing(siteId, businessDateOf(new Date().toISOString()));
+      const outcome = completeStep(session, closingCtx(), declaration);
+      if (!outcome.ok) return outcome.message;
+
+      /*
+       * Traduction des faits du domaine vers le vocabulaire que la
+       * synchronisation sait envoyer.
+       *
+       * Le domaine décrit une étape ; le transport, lui, parle à des fonctions
+       * PostgreSQL déjà écrites, qui attendent une forme précise. Deux
+       * traductions sont nécessaires, et aucune n'est cosmétique — sans elles
+       * l'événement échoue en base et se réessaie sans fin, ce qui garde la
+       * file non vide et bloque toute hydratation.
+       */
+      const events: DomainEvent[] = [];
+      const variances: Variance[] = [];
+
+      for (const draft of outcome.events) {
+        if (draft.eventType === 'CASH_SESSION_CLOSED') {
+          /* Le domaine ignore l'identité du tiroir — c'est le store qui la
+             tient. `close_cash_session` veut le numéro de shift et le fond
+             d'ouverture ; sans eux, la clôture n'arrive jamais en base. */
+          const p = draft.payload as { expected: number; countedCash: number; variance: number; reason?: string };
+          events.push(makeEvent('CASH_SESSION_CLOSED', 'CashSession', state.cashSession.id, {
+            cashSessionId: state.cashSession.id,
+            shiftNumber: state.cashSession.shiftNumber,
+            openingCash: state.cashSession.openingCash,
+            expected: p.expected, countedCash: p.countedCash, variance: p.variance, reason: p.reason,
+          }));
+          if (p.variance !== 0) {
+            variances.push({
+              id: uuid(), source: 'CASH', reference: state.cashSession.id,
+              subject: `Shift #${state.cashSession.shiftNumber}`,
+              theoretical: p.expected, declared: p.countedCash, delta: p.variance,
+              amount: Math.abs(p.variance), actor, resolution: null, resolver: null,
+              createdAt: actor.at,
+            });
+          }
+          continue;
+        }
+
+        if (draft.eventType === 'STOCK_COUNTED') {
+          /* `apply_inventory_count` traite UN article : le comptage du soir en
+             porte autant qu'il y a de lignes. On les déplie, dans la forme
+             exacte que l'inventaire utilise déjà. */
+          const lines = (draft.payload as { lines?: {
+            itemId: UUID; locationId: UUID; theoretical: number; counted: number;
+            delta: number; reason?: WasteReason;
+          }[] }).lines ?? [];
+          for (const line of lines) {
+            if (Math.abs(line.delta) < 0.0001) continue;
+            const item = itemsMap.get(line.itemId);
+            const countId = uuid();
+            events.push(makeEvent('STOCK_COUNTED', 'InventoryCount', countId, {
+              countId, itemId: line.itemId, locationId: line.locationId,
+              unit: item?.unit ?? 'unite',
+              theoretical: line.theoretical, counted: line.counted, delta: line.delta,
+              reason: line.reason ?? 'INCONNU',
+            }));
+            variances.push({
+              id: uuid(), source: 'STOCK', reference: countId,
+              subject: item?.name ?? 'Article',
+              theoretical: line.theoretical, declared: line.counted, delta: line.delta,
+              amount: Math.abs(Math.round(line.delta * (item?.weightedAvgCost ?? 0))),
+              actor, resolution: null, resolver: null, createdAt: actor.at,
+            });
+          }
+          continue;
+        }
+
+        /* La détection d'écart n'a pas d'événement à elle : `resolve_variance`
+           attend une RÉSOLUTION, et personne n'a encore donné de motif. L'écart
+           vit localement jusqu'à ce que quelqu'un le solde, et c'est ce
+           geste-là qui l'enverra. */
+        if (draft.eventType === 'STOCK_VARIANCE_DETECTED') continue;
+
+        events.push(makeEvent(draft.eventType, draft.entityType, draft.entityId, draft.payload));
+      }
+
+      dispatch({
+        type: 'COMMIT',
+        closing: outcome.session,
+        closure: outcome.closure ?? undefined,
+        movements: outcome.movements.map((m) =>
+          makeMovement(m.itemId, m.locationId, m.quantity, m.unit, m.movementType,
+            m.referenceType, m.referenceId, actor),
+        ),
+        events,
+        variances: variances.length ? variances : undefined,
+        audit: outcome.audit.map((a) => makeAudit(actor, a.action, a.detail, a.reference)),
+        /* La caisse se ferme avec l'étape qui la compte, pas séparément. */
+        cashSession: declaration.step === 'CASH_COUNT'
+          ? {
+              ...state.cashSession,
+              countedCash: declaration.countedCash,
+              closedAt: actor.at,
+              varianceReason: declaration.reason,
+            }
+          : undefined,
+      });
+      return null;
+    },
+    [state.closing, state.cashSession, siteId, itemsMap, authorize, closingCtx, makeMovement, makeEvent, makeAudit],
+  );
+
+  const revertClosingStep = useCallback<Ctx['revertClosingStep']>(
+    (step) => {
+      const actor = authorize('MANAGE_CASH_SESSION');
+      if (!actor || !state.closing) return "Aucune clôture en cours.";
+      const outcome = revertStep(state.closing, step);
+      if (!outcome.ok) return outcome.message;
+      dispatch({
+        type: 'COMMIT',
+        closing: outcome.session,
+        audit: outcome.audit.map((a) => makeAudit(actor, a.action, a.detail, a.reference)),
+      });
+      return null;
+    },
+    [state.closing, authorize, makeAudit],
+  );
+
   const resolveVariance = useCallback<Ctx['resolveVariance']>(
     (varianceId, resolution, note) => {
       const actor = authorize('RESOLVE_VARIANCE');
@@ -1515,12 +1899,13 @@ export function BunaProvider({ children }: { children: ReactNode }) {
         soldToday,
         cashVariance,
         wasteCostToday: state.waste.reduce((sum, w) => sum + w.cost, 0),
+        finishedGoodsAlerts: policyOf(state.operatingMode).finishedGoodsAlerts,
       },
       state.cooldowns,
     );
 
     if (notifications.length) dispatch({ type: 'RAISE', notifications, cooldowns });
-  }, [state.items, state.sales, state.waste, state.cashSession, state.cooldowns, stock]);
+  }, [state.items, state.sales, state.waste, state.cashSession, state.cooldowns, state.operatingMode, stock]);
 
   /* ----------------------------------------------------------- Sync */
 
@@ -1599,6 +1984,12 @@ export function BunaProvider({ children }: { children: ReactNode }) {
           suppliers: snapshot.suppliers,
           users: snapshot.users,
           items: snapshot.items,
+          /* Les recettes du serveur font autorité dès qu'il en a. Une liste
+             vide ne remplace jamais la liste locale — c'est la règle de
+             `applyReferentials` — donc une boutique qui n'a encore rien
+             envoyé garde les siennes. */
+          recipes: snapshot.recipes,
+          recipeVersions: snapshot.recipeVersions,
         });
 
         dispatch({ type: 'HYDRATE_SNAPSHOT', snapshot });
@@ -1664,6 +2055,11 @@ export function BunaProvider({ children }: { children: ReactNode }) {
     recordExpense, receiveGoods, openCashSession, closeCashSession, setNotificationStatus, stockOf,
     dismissFromList, dismissedIn, restoreList, outboxDurable,
     saveItem, archiveItem, adjustStock, saveLocation, saveRecipe,
+    operatingMode: state.operatingMode,
+    policy: policyOf(state.operatingMode),
+    setOperatingMode,
+    closing: state.closing,
+    closingCtx, openClosing, submitClosingStep, revertClosingStep,
   };
 
   return <BunaContext.Provider value={value}>{children}</BunaContext.Provider>;

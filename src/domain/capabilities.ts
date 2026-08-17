@@ -35,6 +35,7 @@ export const CAPABILITIES = [
   'RECORD_EXPENSE', 'VIEW_FINANCES', 'CLOSE_DAY', 'REOPEN_DAY',
   /* Pilotage */
   'VIEW_DASHBOARD', 'MANAGE_CATALOG', 'MANAGE_LOCATIONS', 'MANAGE_TEAM', 'VIEW_AUDIT_LOG',
+  'MANAGE_SETTINGS',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -74,6 +75,9 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   MANAGE_LOCATIONS: 'Gérer les emplacements',
   MANAGE_TEAM: "Gérer l'équipe et les accès",
   VIEW_AUDIT_LOG: 'Consulter le journal',
+  /* Le libellé nomme l'effet, pas l'écran : ce réglage décide de ce que
+     l'application exige de TOUTE l'équipe, pas seulement de qui l'ouvre. */
+  MANAGE_SETTINGS: 'Choisir comment la maison suit ses coûts',
 };
 
 /** À quelle feature chaque capacité se rattache — la navigation en dépend. */
@@ -91,7 +95,7 @@ export const CAPABILITY_FEATURE: Record<Capability, FeatureId> = {
   RECORD_EXPENSE: 'FINANCE', VIEW_FINANCES: 'FINANCE', CLOSE_DAY: 'FINANCE', REOPEN_DAY: 'FINANCE',
 
   VIEW_DASHBOARD: 'PILOTAGE', MANAGE_CATALOG: 'PILOTAGE', MANAGE_LOCATIONS: 'PILOTAGE',
-  MANAGE_TEAM: 'PILOTAGE', VIEW_AUDIT_LOG: 'PILOTAGE',
+  MANAGE_TEAM: 'PILOTAGE', VIEW_AUDIT_LOG: 'PILOTAGE', MANAGE_SETTINGS: 'PILOTAGE',
 };
 
 /* ----------------------------------------------------------------- Postes */
@@ -141,6 +145,10 @@ const MANAGER_PRESET: Capability[] = [...new Set<Capability>([
   'VOID_SALE', 'VIEW_ALL_SALES', 'RESOLVE_VARIANCE', 'EDIT_RECIPE',
   'APPROVE_PURCHASE', 'VIEW_FINANCES', 'CLOSE_DAY', 'VIEW_DASHBOARD',
   'MANAGE_CATALOG', 'MANAGE_LOCATIONS', 'MANAGE_TEAM', 'VIEW_AUDIT_LOG',
+  /* Le régime d'exploitation fait partie de l'encadrement, pas du privilège du
+     propriétaire : c'est le manager qui est là quand la méthode ne colle plus
+     au terrain. Il reste révocable comme n'importe quelle autre capacité. */
+  'MANAGE_SETTINGS',
 ])];
 
 /**
@@ -172,6 +180,53 @@ export interface CapabilityGrant {
   revokedBy?: UUID;
   revokedByName?: string;
   revokedAt?: string;
+}
+
+/**
+ * Les accords qui manquent parce que la capacité n'existait pas encore.
+ *
+ * Une nouvelle version peut introduire une capacité — `MANAGE_SETTINGS` en est
+ * la première. Elle n'a alors été offerte à personne : elle n'apparaît nulle
+ * part dans le journal des accords, ni accordée ni révoquée. Résultat, l'écran
+ * qu'elle garde est inaccessible à TOUT LE MONDE, y compris à celui qui a
+ * installé l'application — et personne ne peut se l'accorder, puisque même le
+ * propriétaire ne l'a pas.
+ *
+ * On retombe donc sur la règle qui vaut déjà à la création d'un compte : le
+ * poste PROPOSE un jeu de départ. Ce n'est pas une règle d'autorisation qui
+ * reviendrait par la fenêtre — c'est le même geste, au même moment logique,
+ * pour une capacité qui vient de naître.
+ *
+ * Le filtre est étroit et il compte : une capacité déjà présente dans le
+ * journal, même RÉVOQUÉE, n'est jamais réaccordée. Retirer un droit reste un
+ * fait daté qu'aucune mise à jour ne défait.
+ *
+ * Le serveur fait le même rattrapage de son côté (migration 0024) ; celui-ci
+ * sert aux appareils, qui lisent leur état local bien avant la première
+ * hydratation — et à l'application sans backend (RULE-010).
+ */
+export function backfillGrants(
+  grants: readonly CapabilityGrant[],
+  users: readonly { id: UUID; name: string; post: Post }[],
+  at: string,
+): CapabilityGrant[] {
+  const known = new Set(grants.map((g) => `${g.userId}:${g.capability}`));
+  const out: CapabilityGrant[] = [];
+
+  for (const user of users) {
+    for (const capability of POST_PRESET[user.post] ?? []) {
+      if (known.has(`${user.id}:${capability}`)) continue;
+      out.push({
+        id: `backfill-${user.id}-${capability}`,
+        userId: user.id,
+        capability,
+        grantedBy: user.id,
+        grantedByName: user.name,
+        grantedAt: at,
+      });
+    }
+  }
+  return out;
 }
 
 /** Les capacités effectives d'un utilisateur : les accords non révoqués. */

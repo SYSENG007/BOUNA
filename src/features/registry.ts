@@ -259,6 +259,11 @@ export const FEATURES: Feature[] = [
         to: '/pilotage/emplacements', requires: 'MANAGE_LOCATIONS', Icon: IconSettings, declares: false,
       },
       {
+        id: 'pilot.reglages', label: CAPABILITY_LABEL.MANAGE_SETTINGS,
+        hint: 'Suivi simple ou suivi précis — ce que l’application exige, et ce qu’elle déduit',
+        to: '/pilotage/reglages', requires: 'MANAGE_SETTINGS', Icon: IconSettings, declares: false,
+      },
+      {
         id: 'pilot.journal', label: CAPABILITY_LABEL.VIEW_AUDIT_LOG,
         hint: 'Chaque opération, son auteur, et sous quelle autorisation',
         to: '/pilotage/journal', requires: 'VIEW_AUDIT_LOG', Icon: IconUser, declares: false,

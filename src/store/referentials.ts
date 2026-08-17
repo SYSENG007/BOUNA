@@ -121,6 +121,15 @@ interface CachedReferentials {
   suppliers: Supplier[];
   users: User[];
   aliases: [string, string][];
+  /*
+   * Les recettes étaient les seules à ne pas être écrites ici : leurs versions
+   * survivaient au rechargement, mais leur en-tête — nom et article produit —
+   * repartait de la graine, donc vide. Une recette enregistrée disparaissait
+   * au premier rechargement, et l'écran de préparation ne retrouvait jamais
+   * de quoi travailler. Optionnel : les caches écrits avant ce correctif
+   * n'ont pas la clé.
+   */
+  recipes?: Recipe[];
   recipeVersions: RecipeVersion[];
 }
 
@@ -160,6 +169,7 @@ function install(cached: CachedReferentials): void {
   replace(LOCATIONS, cached.locations);
   replace(SUPPLIERS, cached.suppliers);
   replace(USERS, cached.users);
+  if (cached.recipes) replace(RECIPES, cached.recipes);
   replace(RECIPE_VERSIONS, cached.recipeVersions);
   aliases = new Map(cached.aliases);
 }
@@ -230,6 +240,7 @@ export function applyReferentials(input: ReferentialInput): string {
     suppliers: SUPPLIERS.map((s) => ({ ...s })),
     users: USERS.map((u) => ({ ...u })),
     aliases: aliasEntries(),
+    recipes: RECIPES.map((r) => ({ ...r })),
     recipeVersions: RECIPE_VERSIONS.map((v) => ({ ...v, ingredients: v.ingredients.map((i) => ({ ...i })) })),
   });
 

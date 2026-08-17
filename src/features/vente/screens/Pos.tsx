@@ -17,7 +17,7 @@ import type { Item, UUID } from '../../../domain/types';
  * Objectif PRD : vente standard en moins de 10 s, 3 à 5 interactions.
  */
 export function Pos() {
-  const { state, user, stockOf, can } = useBuna();
+  const { state, user, stockOf, can, policy } = useBuna();
   const { cart, add, remove, count, total } = useCart();
   const navigate = useNavigate();
 
@@ -93,6 +93,7 @@ export function Pos() {
             stockOf={stockOf}
             onAdd={add}
             onRemove={remove}
+            blockWithoutStock={policy.saleBlockedWithoutStock}
           />
         </ErrorBoundary>
       </main>
@@ -157,13 +158,24 @@ function CaisseFermee({ canOpen }: { canOpen: boolean }) {
 }
 
 function ProductGrid({
-  items, cart, stockOf, onAdd, onRemove,
+  items, cart, stockOf, onAdd, onRemove, blockWithoutStock,
 }: {
   items: Item[];
   cart: Record<UUID, number>;
   stockOf: (itemId: UUID) => number;
   onAdd: (id: UUID) => void;
   onRemove: (id: UUID) => void;
+  /**
+   * Le manque de stock refuse-t-il la vente ?
+   *
+   * En suivi simple, non. Le stock d'un produit fini y est une DÉCLARATION —
+   * « j'ai préparé quarante cafés » — pas un compte tenu à l'unité près.
+   * Refuser d'encaisser parce qu'une déclaration du matin est épuisée
+   * reviendrait à refuser le seul chiffre que l'établissement connaisse
+   * vraiment : sa vente. Le négatif qui en résulte n'est pas une erreur, c'est
+   * la question que le comptage du soir posera.
+   */
+  blockWithoutStock: boolean;
 }) {
   const products = items.filter((i) => i.kind === 'FINISHED');
 
@@ -179,14 +191,15 @@ function ProductGrid({
            le déclarer en rupture parce qu'il vaut zéro rendrait la carte
            invendable en permanence. Sa disponibilité tient aux ingrédients. */
         const toOrder = isMadeToOrder(p);
-        const out = !toOrder && available <= 0;
+        const empty = !toOrder && available <= 0;
+        const out = empty && blockWithoutStock;
         /* Le plafond s'applique à CHAQUE ajout, pas seulement au premier :
            `out` ne protégeait que l'appui initial — rien n'empêchait ensuite
            le bouton « + » du stepper de dépasser indéfiniment le disponible.
            Aucun produit du catalogue actuel n'est en BATCH (tous sont « à la
            commande »), donc ce plafond est dormant aujourd'hui — mais il
            redevient actif dès qu'un produit fini stocké réapparaît. */
-        const atCeiling = !toOrder && qty >= available;
+        const atCeiling = blockWithoutStock && !toOrder && qty >= available;
         return (
           <div
             key={p.id}
@@ -212,8 +225,18 @@ function ProductGrid({
             <div className="flex items-end justify-between">
               <div>
                 <div className="t-figure text-[19px] text-cafe">{fcfa(p.price ?? 0)}</div>
-                <div className="text-[11px] text-ink-500">
-                  {toOrder ? 'À la commande' : out ? 'Rupture' : `${Math.floor(available)} dispo`}
+                {/* Le chiffre reste affiché même quand il ne bloque plus : il
+                    informe le vendeur au lieu de lui interdire. En dessous de
+                    zéro, il dit « on a vendu plus que déclaré » — une question
+                    pour le soir, pas un refus au comptoir. */}
+                <div className={clsx('text-[11px]', empty ? 'text-or-ink' : 'text-ink-500')}>
+                  {toOrder
+                    ? 'À la commande'
+                    : out
+                      ? 'Rupture'
+                      : available <= 0
+                        ? 'Plus rien de déclaré'
+                        : `${Math.floor(available)} dispo`}
                 </div>
               </div>
 

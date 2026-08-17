@@ -62,10 +62,13 @@ where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
 order by 1;
 
 \echo
-\echo '=== 5. Les 25 capacités sont bien en base ============================='
+\echo '=== 5. Les 26 capacités sont bien en base ============================='
+\echo 'Le compte suit `CAPABILITIES` dans src/domain/capabilities.ts : une'
+\echo 'capacité connue du client et absente de l''enum fait échouer chaque'
+\echo 'accord, et l''écran correspondant devient inaccessible à tout le monde.'
 
 select count(*) as capacites,
-       case when count(*) = 25 then 'OK' else 'ÉCHEC' end as verdict
+       case when count(*) = 26 then 'OK' else 'ÉCHEC' end as verdict
 from pg_enum e join pg_type t on t.oid = e.enumtypid
 where t.typname = 'capability';
 

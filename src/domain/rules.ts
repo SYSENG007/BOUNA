@@ -47,6 +47,20 @@ export interface RuleInput {
   soldToday: Map<UUID, number>;
   cashVariance: number | null;
   wasteCostToday: number;
+  /**
+   * Le stock d'un produit fini mérite-t-il une alerte ?
+   *
+   * En suivi simple, non : ce stock est une déclaration du matin, pas un
+   * compte tenu à l'unité près, et le comptoir vend au-delà sans refuser.
+   * Il passe donc sous zéro tous les jours, par construction. Une « Rupture »
+   * par produit et par service ne serait pas une information — seulement du
+   * bruit qui apprend à ignorer les alertes, y compris les vraies. Les
+   * matières et les emballages, eux, continuent d'alerter : ceux-là se
+   * comptent pour de bon.
+   *
+   * Absent = on alerte, qui reste le comportement du suivi précis.
+   */
+  finishedGoodsAlerts?: boolean;
 }
 
 /**
@@ -60,8 +74,13 @@ export function evaluateRules(
 ): { notifications: Notification[]; cooldowns: Cooldowns } {
   const candidates: Candidate[] = [];
 
+  const finishedAlerts = input.finishedGoodsAlerts ?? true;
+
   for (const item of input.items) {
     if (item.archived) continue;
+    const isFinishedItem = item.kind === 'FINISHED';
+    if (isFinishedItem && !finishedAlerts) continue;
+
     const qty = input.stockOf(item.id);
     const health = stockHealth(qty, item);
 

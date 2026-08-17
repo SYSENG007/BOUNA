@@ -2,7 +2,8 @@ import {
   MOVEMENT_TYPES, UNIT_BASE,
   type AuditEvent, type CashSession, type DomainEvent, type EventType, type Expense,
   type Item, type ItemKind, type LocationType, type MovementType, type Notification,
-  type PaymentMethod, type ProductionBatch, type Purchase, type PurchaseLine,
+  type PaymentMethod, type ProductionBatch, type ProductionMode, type Purchase, type PurchaseLine,
+  type Recipe, type RecipeVersion,
   type Sale, type SaleLine, type SaleStatus, type Severity, type Site, type StockLocation,
   type StockMovement, type Supplier, type Unit, type User, type UUID, type WasteEvent,
   type WasteReason,
@@ -94,6 +95,7 @@ const CAPABILITY_SET = new Set<string>(CAPABILITIES);
 const SEVERITIES = new Set<string>(['INFO', 'ATTENTION', 'ACTION_REQUIRED', 'CRITICAL']);
 const PAYMENTS = new Set<string>(['CASH', 'MOBILE_MONEY', 'CARD', 'OTHER']);
 const WASTE_REASONS = new Set<string>(['CASSE', 'PERIME', 'SURDOSAGE', 'BATCH_RATE', 'INVENDU', 'INCONNU']);
+const PRODUCTION_MODES = new Set<string>(['BATCH', 'MADE_TO_ORDER']);
 
 export function unit(value: unknown, fallback: Unit = 'unite'): Unit {
   return UNITS.has(str(value)) ? (value as Unit) : fallback;
@@ -101,6 +103,20 @@ export function unit(value: unknown, fallback: Unit = 'unite'): Unit {
 
 export function itemKind(value: unknown): ItemKind {
   return KINDS.has(str(value)) ? (value as ItemKind) : 'RAW_MATERIAL';
+}
+
+/**
+ * `BATCH` par défaut, comme la colonne — mais c'est un défaut lourd.
+ *
+ * Un produit fini en `BATCH` n'est vendable que s'il a du stock : c'est la
+ * grille de vente qui le refuse (`Pos.tsx`). Tant que ce mappeur ignorait la
+ * colonne, TOUT article venu du serveur arrivait sans mode, donc traité en
+ * `BATCH`, donc en rupture permanente — la carte entière devenait invendable
+ * sans qu'aucun écran ne puisse rien y changer, puisque rien ne l'écrivait non
+ * plus dans l'autre sens.
+ */
+export function productionMode(value: unknown): ProductionMode {
+  return PRODUCTION_MODES.has(str(value)) ? (value as ProductionMode) : 'BATCH';
 }
 
 export function locationType(value: unknown): LocationType {
@@ -228,6 +244,124 @@ export function mapItem(row: Row): Item {
     weightedAvgCost: num(row.weighted_avg_cost),
     imageUrl: optStr(row.image_url),
     archived: row.active === false,
+    productionMode: productionMode(row.production_mode),
+  };
+}
+
+/**
+ * Le chemin inverse : l'article tel qu'il s'écrit en base.
+ *
+ * Le catalogue était en lecture seule côté client — `items` n'était que
+ * sélectionné. Une modification de prix vivait donc dans l'état local, ne
+ * partait jamais, et la première hydratation la remplaçait par la valeur du
+ * serveur : le prix revenait tout seul à l'ancien, sans rien dire.
+ *
+ * `weighted_avg_cost` est volontairement absent de cette signature. Le coût
+ * moyen pondéré est DÉRIVÉ des réceptions, recalculé par le serveur ; le
+ * réécrire depuis un état client possiblement périmé écraserait un calcul
+ * juste par une valeur ancienne. L'appelant l'ajoute explicitement, et
+ * seulement quand quelqu'un l'a réellement saisi.
+ */
+export function itemRow(item: Item, organizationId: UUID): Row {
+  return {
+    id: item.id,
+    organization_id: organizationId,
+    name: item.name,
+    kind: item.kind,
+    unit: item.unit,
+    minimum_stock: item.minimumStock ?? null,
+    target_stock: item.targetStock ?? null,
+    preferred_supplier_id: item.preferredSupplierId ?? null,
+    price: item.price ?? null,
+    /* Le mode décide si le produit se vend sur stock ou se monte devant le
+       client : ne pas l'écrire laissait la base sur son défaut, et le choix
+       fait à l'écran ne survivait pas au premier rechargement. */
+    production_mode: item.productionMode ?? 'BATCH',
+    /*
+     * Pas de `image_url` : la colonne n'existe pas dans `items`. L'envoyer
+     * faisait échouer l'écriture à chaque fois — et un événement qui échoue
+     * sans fin garde la file non vide, ce qui empêche définitivement
+     * l'hydratation. La photo reste donc sur l'appareil qui l'a prise, tant
+     * qu'une migration ne lui donne pas sa colonne.
+     */
+    active: item.archived !== true,
+  };
+}
+
+/* ------------------------------------------------------------ Recettes */
+
+/**
+ * Une recette telle qu'elle revient de la base.
+ *
+ * `current_version_id` peut être vide : la colonne est arrivée après la table,
+ * et l'écriture d'une recette se fait en plusieurs temps — la version doit
+ * exister avant qu'on puisse la désigner. On retombe donc sur la version au
+ * numéro le plus élevé, qui est ce que « courante » veut dire de toute façon.
+ */
+export function mapRecipe(row: Row, versions: readonly RecipeVersion[]): Recipe {
+  const id = str(row.id);
+  const declared = optStr(row.current_version_id);
+  const mine = versions.filter((v) => v.recipeId === id);
+  const latest = mine.reduce<RecipeVersion | null>(
+    (best, v) => (!best || v.version > best.version ? v : best),
+    null,
+  );
+  return {
+    id,
+    itemId: str(row.item_id),
+    name: str(row.name, 'Recette'),
+    currentVersionId: (declared && mine.some((v) => v.id === declared) ? declared : latest?.id) ?? '',
+  };
+}
+
+/** Une version et ses ingrédients, recollés depuis la jointure. */
+export function mapRecipeVersion(row: Row): RecipeVersion {
+  const ingredients = Array.isArray(row.recipe_ingredients) ? row.recipe_ingredients : [];
+  return {
+    id: str(row.id),
+    recipeId: str(row.recipe_id),
+    version: num(row.version, 1),
+    frozen: row.frozen === true,
+    ingredients: (ingredients as Row[]).map((ing: Row) => ({
+      itemId: str(ing.item_id),
+      quantity: num(ing.quantity),
+      unit: unit(ing.unit),
+    })),
+  };
+}
+
+/**
+ * Le chemin inverse. Trois tables, donc trois écritures : la recette d'abord
+ * (les versions la référencent), la version ensuite, les ingrédients enfin.
+ *
+ * `current_version_id` est volontairement absent de la première écriture : il
+ * pointe vers une version qui n'existe pas encore, et la clé étrangère le
+ * refuserait. Il est posé dans un second temps, une fois la version écrite.
+ */
+export function recipeRows(recipe: Recipe, version: RecipeVersion, organizationId: UUID): {
+  recipe: Row;
+  version: Row;
+  ingredients: Row[];
+} {
+  return {
+    recipe: {
+      id: recipe.id,
+      organization_id: organizationId,
+      item_id: recipe.itemId,
+      name: recipe.name,
+    },
+    version: {
+      id: version.id,
+      recipe_id: recipe.id,
+      version: version.version,
+      frozen: version.frozen,
+    },
+    ingredients: version.ingredients.map((ing) => ({
+      recipe_version_id: version.id,
+      item_id: ing.itemId,
+      quantity: ing.quantity,
+      unit: ing.unit,
+    })),
   };
 }
 
@@ -349,7 +483,7 @@ export function mapBatch(row: Row): ProductionBatch {
     id: str(row.id),
     code: str(row.code, '—'),
     itemId: str(row.item_id),
-    recipeVersionId: str(row.recipe_version_id),
+    recipeVersionId: asUuid(row.recipe_version_id),
     preparerId: str(row.preparer_id),
     locationId: str(row.location_id),
     plannedQuantity: num(row.planned_quantity),

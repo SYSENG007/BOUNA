@@ -5,7 +5,10 @@ import { POST_LABEL } from '../../../domain/capabilities';
 import { clearState } from '../../../store/persist';
 import { operationsByFeature } from '../../registry';
 import { SyncIndicator } from '../../../design-system/components/SyncIndicator';
-import { Badge, Button, Card, SectionLabel } from '../../../design-system/components/primitives';
+import { Badge, Button, Card, SectionLabel, Segmented } from '../../../design-system/components/primitives';
+import {
+  OPERATING_MODES, OPERATING_MODE_LABEL, OPERATING_MODE_SPECS, type OperatingMode,
+} from '../../../domain/operating-mode';
 import { BunaLogo } from '../../../design-system/components/BunaLogo';
 
 /**
@@ -19,7 +22,10 @@ import { BunaLogo } from '../../../design-system/components/BunaLogo';
  * peut s'accorder soi-même n'ajoutait qu'une page à lire.
  */
 export function Profil() {
-  const { user, state, logout, pending, online, lastSyncAt, syncNow, can, outboxDurable } = useBuna();
+  const {
+    user, state, logout, pending, online, lastSyncAt, syncNow, can, outboxDurable,
+    operatingMode, setOperatingMode,
+  } = useBuna();
   const navigate = useNavigate();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -81,13 +87,43 @@ export function Profil() {
           </Card>
         )}
 
-        {can('MANAGE_TEAM') && (
+        {/*
+          Le suivi des coûts — l'interrupteur, pas un lien vers un écran.
+          C'est le seul réglage qui change la méthode de toute l'équipe, et il
+          se bascule en un geste : le régime ne touche à rien de ce qui est
+          enregistré, donc revenir en arrière est le même geste dans l'autre
+          sens et ne recalcule rien.
+        */}
+        {can('MANAGE_SETTINGS') && (
+          <Card className="space-y-2.5">
+            <SectionLabel>Suivi des coûts</SectionLabel>
+            <Segmented
+              full
+              value={operatingMode}
+              onChange={(mode: OperatingMode) => setOperatingMode(mode)}
+              options={OPERATING_MODES.map((m) => ({ value: m, label: OPERATING_MODE_LABEL[m] }))}
+            />
+            <p className="text-[13px] leading-relaxed text-ink-600">
+              {OPERATING_MODE_SPECS[operatingMode].summary}
+            </p>
+            <p className="text-[12px] leading-relaxed text-ink-500">
+              S'applique à toute l'équipe. Rien de ce qui est déjà saisi ne change.
+            </p>
+            <Button variant="secondary" onClick={() => navigate('/pilotage/reglages')}>
+              Ce que ça change, écran par écran
+            </Button>
+          </Card>
+        )}
+
+        {(can('MANAGE_TEAM') || can('MANAGE_SETTINGS')) && (
           <Card className="space-y-3">
             <SectionLabel>Administration</SectionLabel>
             <div className="grid grid-cols-1 gap-2">
-              <Button variant="secondary" onClick={() => navigate('/pilotage/equipe')}>
-                Équipe et accès
-              </Button>
+              {can('MANAGE_TEAM') && (
+                <Button variant="secondary" onClick={() => navigate('/pilotage/equipe')}>
+                  Équipe et accès
+                </Button>
+              )}
               {can('MANAGE_CATALOG') && (
                 <Button variant="secondary" onClick={() => navigate('/pilotage/catalogue')}>Catalogue</Button>
               )}

@@ -262,17 +262,33 @@ export function Divider() {
 /* ------------------------------------------------- Onglets segmentés */
 
 export function Segmented<T extends string>({
-  value, onChange, options,
-}: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
+  value, onChange, options, full = false, size = 'compact',
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+  /** Occupe toute la largeur, à parts égales — pour un choix qui EST l'écran. */
+  full?: boolean;
+  /** `counter` porte une cible de 56 px : un réglage qu'on bascule au pouce. */
+  size?: 'compact' | 'counter';
+}) {
   return (
-    <div className="no-select inline-flex rounded-[6px] border border-ink-200 bg-surface p-0.5">
+    <div
+      className={clsx(
+        'no-select rounded-[6px] border border-ink-200 bg-surface p-0.5',
+        full ? 'flex w-full' : 'inline-flex',
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'min-h-[36px] rounded-[4px] px-3.5 text-[13px] font-medium transition-colors',
+            'rounded-[4px] font-medium transition-colors',
+            size === 'counter' ? 'min-h-[56px] text-[15px]' : 'min-h-[36px] text-[13px]',
+            full ? 'flex-1 px-2' : 'px-3.5',
             value === o.value ? 'bg-cafe text-sable-pale' : 'text-ink-600 hover:text-cafe',
           )}
         >

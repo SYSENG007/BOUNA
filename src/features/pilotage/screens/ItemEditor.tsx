@@ -4,7 +4,7 @@ import { uuid } from '../../../domain/ids';
 import { fileToThumbnail, isImage } from '../../../domain/image';
 import { fcfaFull } from '../../../domain/money';
 import { canConvert } from '../../../domain/units';
-import { UNIT_LABEL, type Item, type ItemKind, type Unit } from '../../../domain/types';
+import { UNIT_LABEL, type Item, type ItemKind, type ProductionMode, type Unit } from '../../../domain/types';
 import { ScreenHeader } from '../../../design-system/components/patterns';
 import { ProductImage } from '../../../design-system/components/ProductImage';
 import {
@@ -22,6 +22,16 @@ const KIND_OPTIONS: { value: ItemKind; label: string }[] = [
 
 const UNITS: Unit[] = ['unite', 'L', 'mL', 'kg', 'g', 'bouteille', 'sachet', 'paquet', 'carton'];
 
+/*
+ * Comment le produit existe. Le mot décide de ce que le comptoir accepte : un
+ * produit préparé d'avance ne se vend que s'il en reste, un produit monté
+ * devant le client n'a jamais de stock à lui.
+ */
+const MODE_OPTIONS: { value: ProductionMode; label: string }[] = [
+  { value: 'MADE_TO_ORDER', label: 'Monté devant le client' },
+  { value: 'BATCH', label: "Préparé d'avance, il se compte" },
+];
+
 /** Création et modification d'un article. Une seule action pleine : « Enregistrer ». */
 export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => void }) {
   const { state, saveItem, archiveItem } = useBuna();
@@ -31,6 +41,10 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
     item ?? {
       id: uuid(), name: '', kind: 'FINISHED', unit: 'unite',
       price: undefined, weightedAvgCost: 0, minimumStock: undefined, targetStock: undefined,
+      /* Un nouveau produit se monte devant le client jusqu'à preuve du
+         contraire : c'est le cas le plus courant au comptoir, et le seul qui
+         ne réclame ni recette ni batch pour être vendable dès le premier jour. */
+      productionMode: 'MADE_TO_ORDER',
     },
   );
   const [imageBusy, setImageBusy] = useState(false);
@@ -108,8 +122,12 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
           <ProductImage src={draft.imageUrl} name={draft.name || '?'} size="lg" />
           <div className="min-w-0 flex-1 space-y-2">
             <SectionLabel>Photo du produit</SectionLabel>
+            {/* La table `items` n'a pas de colonne pour la photo : elle ne part
+                pas au serveur et ne suivra pas sur un autre appareil. On le dit
+                plutôt que de laisser quelqu'un la voir disparaître. */}
             <p className="text-[12px] leading-snug text-ink-500">
-              Carré, recadrée automatiquement. Elle apparaît sur la grille de vente.
+              Carré, recadrée automatiquement. Elle apparaît sur la grille de vente,
+              et reste sur cet appareil.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button size="compact" disabled={imageBusy} onClick={() => fileInput.current?.click()}>
@@ -147,6 +165,20 @@ export function ItemEditor({ item, onDone }: { item: Item | null; onDone: () => 
           onChange={(v) => patch({ kind: v as ItemKind })}
           options={KIND_OPTIONS}
         />
+
+        {draft.kind === 'FINISHED' && (
+          <SelectField
+            label="Comment il est fait"
+            value={draft.productionMode ?? 'BATCH'}
+            onChange={(v) => patch({ productionMode: v as ProductionMode })}
+            options={MODE_OPTIONS}
+            hint={
+              (draft.productionMode ?? 'BATCH') === 'BATCH'
+                ? "Il a un stock qui se compte : le comptoir affiche ce qu'il en reste, et la production sait combien en préparer."
+                : "Il n'a pas de stock à lui — sa disponibilité tient à celle de ses ingrédients. Le comptoir ne le mettra jamais en rupture."
+            }
+          />
+        )}
 
         <SelectField
           label="Unité"

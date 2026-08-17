@@ -38,6 +38,10 @@ const RPC_BY_EVENT: Partial<Record<DomainEvent['eventType'], string>> = {
   STOCK_VARIANCE_DETECTED: 'resolve_variance',
   CAPABILITY_GRANTED: 'grant_capability',
   CAPABILITY_REVOKED: 'revoke_capability',
+  /* Le régime d'exploitation : un réglage de site, mais envoyé comme un fait
+     daté — il change ce que l'application exige de toute l'équipe, et le
+     journal doit pouvoir dire qui l'a changé et quand. */
+  OPERATING_MODE_SET: 'set_operating_mode',
 };
 
 /*
@@ -62,7 +66,61 @@ export const supabaseTransport: Transport = async (events) => {
   for (const event of events) {
     const rpc = RPC_BY_EVENT[event.eventType];
     try {
-      if (rpc) {
+      if (event.eventType === 'CATALOG_ITEM_SAVED') {
+        /*
+         * Le catalogue n'a pas de fonction transactionnelle : il n'a rien à
+         * rejouer ni à recalculer, et RLS le protège déjà (`items_update`
+         * exige MANAGE_CATALOG dans l'organisation). On écrit donc la ligne
+         * directement. L'idempotence tient à la clé primaire : renvoyer deux
+         * fois la même fiche produit exactement le même article.
+         */
+        const row = (event.payload as { row?: Record<string, unknown> }).row;
+        if (!row) throw new Error('CATALOG_ITEM_SAVED sans ligne à écrire');
+        const { error } = await supabase.from('items').upsert(row, { onConflict: 'id' });
+        if (error) throw error;
+      } else if (event.eventType === 'RECIPE_SAVED') {
+        /*
+         * Trois tables, dans l'ordre où les clés étrangères l'exigent : la
+         * recette, puis sa version, puis les ingrédients. `current_version_id`
+         * vient en dernier — il désigne une version qui n'existe pas encore au
+         * moment où la recette est écrite.
+         *
+         * L'ensemble n'est pas transactionnel, et c'est acceptable ici : tout
+         * est écrit par clé primaire, donc rejouable à l'identique. Un échec
+         * en cours de route laisse l'événement dans la file, et la tentative
+         * suivante repasse les quatre écritures. Les écrans savent déjà lire
+         * une recette dont la version manque encore.
+         */
+        const p = event.payload as {
+          recipe?: Record<string, unknown>;
+          version?: Record<string, unknown>;
+          ingredients?: Record<string, unknown>[];
+        };
+        if (!p.recipe || !p.version) throw new Error('RECIPE_SAVED incomplet');
+
+        const recipeWrite = await supabase.from('recipes').upsert(p.recipe, { onConflict: 'id' });
+        if (recipeWrite.error) throw recipeWrite.error;
+
+        const versionWrite = await supabase.from('recipe_versions').upsert(p.version, { onConflict: 'id' });
+        if (versionWrite.error) throw versionWrite.error;
+
+        /* Les ingrédients d'une version sont réécrits en bloc : une version
+           est immuable une fois gelée, et l'éditeur en crée une nouvelle à
+           chaque enregistrement — il n'y a donc rien à fusionner. */
+        const versionId = p.version.id as string;
+        const wipe = await supabase.from('recipe_ingredients').delete().eq('recipe_version_id', versionId);
+        if (wipe.error) throw wipe.error;
+
+        if (p.ingredients?.length) {
+          const lines = await supabase.from('recipe_ingredients').insert(p.ingredients);
+          if (lines.error) throw lines.error;
+        }
+
+        const link = await supabase.from('recipes')
+          .update({ current_version_id: versionId })
+          .eq('id', p.recipe.id as string);
+        if (link.error) throw link.error;
+      } else if (rpc) {
         const { error } = await supabase.rpc(rpc, buildArgs(event));
         if (error) throw error;
       } else {
@@ -119,6 +177,15 @@ const PERMANENT = new Set([
   '23502', // colonne NOT NULL restée vide
   '23503', // clé étrangère absente
   '23514', // contrainte CHECK violée
+  /*
+   * Erreurs de schéma : la colonne ou la table n'existe pas. Aucun réessai ne
+   * peut les résoudre, et les laisser en « à réessayer » est bien pire qu'un
+   * simple envoi perdu — la file ne se vide jamais, et une file non vide
+   * empêche l'hydratation de tourner. Un seul événement mal formé gelait
+   * ainsi toute la synchronisation de l'appareil, en silence.
+   */
+  '42703', // colonne inexistante
+  '42P01', // table inexistante
 ]);
 
 /** L'événement était déjà là : c'est exactement ce que l'idempotence promet. */
@@ -193,7 +260,7 @@ function receiptLinesForRpc(lines: ReceiptLine[]): Record<string, unknown>[] {
   }));
 }
 
-interface ConsumptionLine { itemId: UUID; quantity: number; unit?: Unit }
+interface ConsumptionLine { itemId: UUID; quantity: number; unit?: Unit; locationId?: UUID }
 
 /**
  * Les ingrédients consommés par un lot.
@@ -202,12 +269,25 @@ interface ConsumptionLine { itemId: UUID; quantity: number; unit?: Unit }
  * négatifs (la sortie de stock est déjà signée), côté serveur `complete_batch`
  * applique lui-même le signe. Envoyer un négatif ferait rentrer les
  * ingrédients au lieu de les sortir.
+ *
+ * `location_id` voyage avec la ligne, et c'est indispensable :
+ * `stock_movements.location_id` est NOT NULL, et la fonction lisait
+ * `(line->>'location_id')` d'une ligne qui ne l'a jamais porté. Chaque lot
+ * ayant consommé quelque chose échouait donc en base sur un `23502` — code
+ * que `classify` traite en `FAILED`, donc réessayé indéfiniment. Une file qui
+ * ne se vide jamais bloque en plus l'hydratation : un seul batch suffisait à
+ * geler toute la synchronisation de l'appareil, en silence.
+ *
+ * L'emplacement est celui que le client a réellement choisi ingrédient par
+ * ingrédient — le lait sort du frigo, les gobelets de la réserve — et non
+ * l'emplacement de destination du lot.
  */
 function consumptionForRpc(lines: ConsumptionLine[]): Record<string, unknown>[] {
   return lines.map((line) => ({
     item_id: line.itemId,
     quantity: Math.abs(line.quantity),
     unit: line.unit ?? 'unite',
+    location_id: line.locationId ?? null,
   }));
 }
 
@@ -295,7 +375,10 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         p_site_id: event.siteId,
         p_code: payload.code,
         p_item_id: payload.itemId,
-        p_recipe_version_id: payload.recipeVersionId,
+        /* Un lot déclaré sans recette en envoie l'absence, pas une chaîne
+           vide : `''::uuid` est une erreur de cast, et l'événement resterait
+           dans la file à échouer indéfiniment. */
+        p_recipe_version_id: asUuid(payload.recipeVersionId),
         p_location_id: payload.locationId,
         p_planned: payload.planned,
         p_produced: payload.produced,
@@ -303,6 +386,15 @@ export function buildArgs(event: DomainEvent): Record<string, unknown> {
         p_consumption: consumptionForRpc(
           (payload.consumption ?? []) as ConsumptionLine[],
         ),
+        p_created_at_local: event.createdAtLocal,
+        p_device_id: event.deviceId,
+      };
+
+    case 'OPERATING_MODE_SET':
+      return {
+        p_event_id: event.id,
+        p_site_id: event.siteId,
+        p_mode: payload.mode,
         p_created_at_local: event.createdAtLocal,
         p_device_id: event.deviceId,
       };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAPABILITIES, CAPABILITY_FEATURE, CAPABILITY_LABEL, POSTS, POST_PRESET,
-  capabilitiesOfFeature, effectiveCapabilities, holds, visibleFeatures,
+  backfillGrants, capabilitiesOfFeature, effectiveCapabilities, holds, visibleFeatures,
   type CapabilityGrant,
 } from '../capabilities';
 import {
@@ -135,5 +135,58 @@ describe('Le registre des features est la seule source de navigation', () => {
     expect(homeFor(POST_PRESET.MANAGER)).toBe('/pilotage');
     expect(homeFor(POST_PRESET.SELLER)).toBe('/vente');
     expect(homeFor(POST_PRESET.PREPARER)).toBe('/production');
+  });
+});
+
+
+/**
+ * Une capacité née après un cache local.
+ *
+ * `MANAGE_SETTINGS` en est la première : elle n'apparaissait dans aucun accord
+ * enregistré, donc l'écran qu'elle garde devenait inaccessible à tout le monde
+ * — propriétaire compris — et personne ne pouvait se l'accorder faute de la
+ * détenir. Le rattrapage doit être étroit : il répare l'oubli, il ne réécrit
+ * pas l'histoire des délégations.
+ */
+describe('rattrapage des capacités nouvelles', () => {
+  const AT = '2026-08-17T08:00:00.000Z';
+  const owner = { id: 'u-1', name: 'Bouna', post: 'OWNER' as const };
+  const seller = { id: 'u-2', name: 'Awa', post: 'SELLER' as const };
+
+  it("accorde une capacité que le journal n'a jamais vue", () => {
+    const missing = backfillGrants([], [owner], AT);
+    expect(missing.map((g) => g.capability)).toContain('MANAGE_SETTINGS');
+  });
+
+  it('ne ressuscite JAMAIS une capacité révoquée', () => {
+    /* Retirer un droit est un fait daté. Aucune mise à jour ne le défait. */
+    const revoked: CapabilityGrant = {
+      id: 'g1', userId: owner.id, capability: 'MANAGE_SETTINGS',
+      grantedBy: owner.id, grantedByName: 'Bouna', grantedAt: AT,
+      revokedBy: owner.id, revokedByName: 'Bouna', revokedAt: AT,
+    };
+    const missing = backfillGrants([revoked], [owner], AT);
+    expect(missing.map((g) => g.capability)).not.toContain('MANAGE_SETTINGS');
+  });
+
+  it('ne double pas un accord déjà actif', () => {
+    const existing: CapabilityGrant = {
+      id: 'g2', userId: owner.id, capability: 'MANAGE_SETTINGS',
+      grantedBy: owner.id, grantedByName: 'Bouna', grantedAt: AT,
+    };
+    const missing = backfillGrants([existing], [owner], AT);
+    expect(missing.filter((g) => g.capability === 'MANAGE_SETTINGS')).toHaveLength(0);
+  });
+
+  it("ne donne à chacun que ce que son poste propose", () => {
+    /* Le vendeur ne reçoit pas le réglage qui change la méthode de la maison. */
+    const missing = backfillGrants([], [seller], AT);
+    expect(missing.map((g) => g.capability)).not.toContain('MANAGE_SETTINGS');
+    expect(missing.every((g) => POST_PRESET.SELLER.includes(g.capability))).toBe(true);
+  });
+
+  it('rend un état stable : rejoué, il ne produit plus rien', () => {
+    const first = backfillGrants([], [owner, seller], AT);
+    expect(backfillGrants(first, [owner, seller], AT)).toEqual([]);
   });
 });

@@ -62,15 +62,23 @@ where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
 order by 1;
 
 \echo
-\echo '=== 5. Les 26 capacités sont bien en base ============================='
-\echo 'Le compte suit `CAPABILITIES` dans src/domain/capabilities.ts : une'
-\echo 'capacité connue du client et absente de l''enum fait échouer chaque'
-\echo 'accord, et l''écran correspondant devient inaccessible à tout le monde.'
+\echo '=== 5. Le préréglage du propriétaire couvre tout l''enum ==============='
+\echo 'Une capacité que le propriétaire n''a pas est une capacité que PERSONNE'
+\echo 'ne peut accorder : c''est lui la source de la délégation. Elle existe'
+\echo 'dans l''enum, l''écran qu''elle garde est écrit, et il reste fermé à tous.'
+\echo 'Zéro ligne attendue.'
+\echo '(Le nombre de capacités n''est plus comparé à un total écrit en dur : ce'
+\echo ' total demandait qu''on pense à l''incrémenter, et ne disait pas LAQUELLE'
+\echo ' manquait. src/domain/__tests__/prereglages.test.ts tient l''autre moitié'
+\echo ' du contrat, celle que le SQL ne peut pas voir : l''enum contre le client.)'
 
-select count(*) as capacites,
-       case when count(*) = 26 then 'OK' else 'ÉCHEC' end as verdict
-from pg_enum e join pg_type t on t.oid = e.enumtypid
-where t.typname = 'capability';
+select label::text as absente_du_prereglage_proprietaire, 'ÉCHEC' as verdict
+from unnest(enum_range(null::public.capability)) as label
+where not exists (
+  select 1 from public.post_capability_preset p
+  where p.post = 'OWNER' and p.capability = label
+)
+order by 1;
 
 \echo
 \echo '=== 6. Un accord actif est unique, un accord révoqué ne l''est plus ===='
@@ -109,22 +117,21 @@ from pg_policies
 where schemaname = 'public' and tablename = 'variances' and cmd = 'UPDATE';
 
 \echo
-\echo '=== 9. Le déclencheur d''inscription suit l''enum des capacités ========='
-\echo 'Les préréglages de `handle_new_user` sont écrits en dur et datent de'
-\echo '0009. Une capacité née plus tard n''y entre pas toute seule : le compte'
-\echo 'neuf voit l''écran (le client la lui donne) et le serveur la refuse.'
-\echo 'Zéro ligne attendue. `REOPEN_DAY` est réservée au propriétaire, qui'
-\echo 'reçoit `enum_range` en entier — elle n''a donc pas à figurer nommément.'
+\echo '=== 9. Tout se propose, et tout poste a un préréglage =================='
+\echo 'Les préréglages sont une TABLE depuis 0027, plus un tableau en dur dans'
+\echo 'le corps de handle_new_user : on peut donc les interroger. Une capacité'
+\echo 'que personne ne reçoit à l''inscription est le défaut de 0023→0025, et un'
+\echo 'poste sans préréglage fait maintenant échouer l''inscription elle-même.'
+\echo 'Zéro ligne attendue dans les deux cas.'
 
-select label::text as capacite_absente_du_declencheur, 'ÉCHEC' as verdict
+select 'capacité proposée à aucun poste' as probleme, label::text as valeur, 'ÉCHEC' as verdict
 from unnest(enum_range(null::public.capability)) as label
-where label::text <> 'REOPEN_DAY'
-  and position(label::text in (
-        select pg_get_functiondef(p.oid)
-        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public' and p.proname = 'handle_new_user'
-      )) = 0
-order by 1;
+where not exists (select 1 from public.post_capability_preset p where p.capability = label)
+union all
+select 'poste sans aucun préréglage', label::text, 'ÉCHEC'
+from unnest(enum_range(null::public.user_post)) as label
+where not exists (select 1 from public.post_capability_preset p where p.post = label)
+order by 1, 2;
 
 \echo
 \echo '=== RESTE À FAIRE À LA MAIN : le refus effectif ========================'
